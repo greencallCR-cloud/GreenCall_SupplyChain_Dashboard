@@ -1,0 +1,151 @@
+{
+  "source": "Google Sheets original / Consumos",
+  "source_tab_gid": 1389073811,
+  "original_sheet_grid_rows_including_header": 173762,
+  "exported_csv_data_rows": 173761,
+  "rows_without_date": 281,
+  "rows_without_order": 7,
+  "distinct_nonempty_order_values": 17297,
+  "distinct_orders_with_valid_date": 17290,
+  "min_valid_date": "2022-06-16",
+  "max_valid_date": "2026-10-25",
+  "rows_with_sku_in_catalog": 139582,
+  "rows_without_cataloged_sku": 34179,
+  "skus_missing_catalog_top30": [
+    [
+      "34025710",
+      9072
+    ],
+    [
+      "34028678",
+      6265
+    ],
+    [
+      "34028673",
+      4826
+    ],
+    [
+      "34028679",
+      2728
+    ],
+    [
+      "34025707",
+      2465
+    ],
+    [
+      "34025712",
+      1785
+    ],
+    [
+      "SIN SKU",
+      1274
+    ],
+    [
+      "1005749",
+      638
+    ],
+    [
+      "7005296",
+      545
+    ],
+    [
+      "4004163",
+      419
+    ],
+    [
+      "1000954",
+      371
+    ],
+    [
+      "1004137",
+      322
+    ],
+    [
+      "4013099",
+      316
+    ],
+    [
+      "34039504",
+      260
+    ],
+    [
+      "1013553",
+      258
+    ],
+    [
+      "34006325",
+      254
+    ],
+    [
+      "1005745",
+      244
+    ],
+    [
+      "34025709",
+      181
+    ],
+    [
+      "34039512",
+      174
+    ],
+    [
+      "34028677",
+      166
+    ],
+    [
+      "34031284",
+      158
+    ],
+    [
+      "1022237",
+      157
+    ],
+    [
+      "4008456",
+      153
+    ],
+    [
+      "34006327",
+      144
+    ],
+    [
+      "34039501",
+      108
+    ],
+    [
+      "34039508",
+      83
+    ],
+    [
+      "4008706",
+      81
+    ],
+    [
+      "34015170",
+      76
+    ],
+    [
+      "34039513",
+      74
+    ],
+    [
+      "34039506",
+      67
+    ]
+  ],
+  "catalog_entries": 50,
+  "catalog_cost_context_missing": [
+    {
+      "sku": "4011388",
+      "center": "R859",
+      "warehouse": "Q000",
+      "lot": "NOVALORADO"
+    }
+  ],
+  "integrity_notes": [
+    "El total de 173.761 se verificó en CSV del tab exclusivo y se conserva íntegro en local-data/base.json (únicamente campos operativos).",
+    "Algunas columnas con fórmulas de otras pestañas pierden valores cuando se duplica una sola pestaña; los campos de fechas/SKU/órdenes de Consumos se contrastaron contra lecturas directas del origen.",
+    "No se usa tab ODT para producción. SKU fuera del catálogo se registran como excluidos, no como material.",
+    "Órdenes sin fecha no entran en series cronológicas; su número se conserva en la conciliación."
+  ]
+}

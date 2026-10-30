@@ -1,0 +1,109 @@
+{
+  "pages": [
+    {
+      "tab": "overview",
+      "title": "Resumen ejecutivo.",
+      "content_length": 3313,
+      "error": null
+    },
+    {
+      "tab": "inventory",
+      "title": "Inventario real.",
+      "content_length": 7342,
+      "error": null
+    },
+    {
+      "tab": "consumptions",
+      "title": "Consumos & órdenes.",
+      "content_length": 15208,
+      "error": null
+    },
+    {
+      "tab": "dispatch",
+      "title": "Despachos integrados.",
+      "content_length": 15815,
+      "error": null
+    },
+    {
+      "tab": "rotation",
+      "title": "Rotación materiales.",
+      "content_length": 9003,
+      "error": null
+    },
+    {
+      "tab": "policy",
+      "title": "Quiebre de política.",
+      "content_length": 10697,
+      "error": null
+    },
+    {
+      "tab": "abc",
+      "title": "Super ABC.",
+      "content_length": 3597,
+      "error": null
+    },
+    {
+      "tab": "forecast",
+      "title": "Forecast & demanda.",
+      "content_length": 6029,
+      "error": null
+    },
+    {
+      "tab": "planning",
+      "title": "Planning cockpit.",
+      "content_length": 6610,
+      "error": null
+    },
+    {
+      "tab": "charges",
+      "title": "Cobros.",
+      "content_length": 1597,
+      "error": null
+    },
+    {
+      "tab": "workshop",
+      "title": "Devoluciones a taller.",
+      "content_length": 1452,
+      "error": null
+    },
+    {
+      "tab": "technicians",
+      "title": "Técnicos & stock.",
+      "content_length": 3315,
+      "error": null
+    },
+    {
+      "tab": "quality",
+      "title": "Detalle & calidad.",
+      "content_length": 1452,
+      "error": null
+    },
+    {
+      "tab": "admin",
+      "title": "Administración.",
+      "content_length": 1714,
+      "error": null
+    }
+  ],
+  "errors": [],
+  "console_errors": [],
+  "screenshots": [
+    "desktop_resumen.png",
+    "desktop_inventario.png",
+    "desktop_consumos.png",
+    "desktop_despachos.png",
+    "desktop_forecast.png",
+    "desktop_cobros.png",
+    "desktop_taller.png",
+    "desktop_administracion.png",
+    "mobile_resumen.png",
+    "mobile_inventario.png"
+  ],
+  "desktop_overflow": false,
+  "date_filter_changed": true,
+  "date_filter_mode": "UI mock de transporte con respuestas /api/dashboard reales del servidor, filtradas y sin filtrar",
+  "mobile_overflow": false,
+  "mobile_toggle_opened": true,
+  "mobile_nav_ok": true,
+  "mobile_drawer_closed": true
+}

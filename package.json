@@ -1,0 +1,17 @@
+{
+  "name": "greencall-supplychain-inventory-bi",
+  "version": "1.4.1",
+  "private": true,
+  "type": "module",
+  "description": "GreenCall Supply Chain & Inventory BI · aplicación local independiente",
+  "scripts": {
+    "start": "node local-server.mjs",
+    "local": "node local-server.mjs",
+    "check": "node --check local-server.mjs && node --check src/core.mjs && node --check src/xlsx.mjs && node --check src/sheets-sync.mjs && node --check public/assets/app.js && node --check src/import-commit.mjs && node --check src/security.mjs",
+    "validate": "node tools/qa.mjs && node tools/qa_extended.mjs && node tools/qa_sheets_sync.mjs && node tools/qa_hardening.mjs",
+    "perf": "node tools/qa_performance.mjs",
+    "http-qa": "node tools/qa_http_v141.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

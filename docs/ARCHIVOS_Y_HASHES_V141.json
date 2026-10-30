@@ -1,0 +1,321 @@
+{
+  "generated_utc": "2026-10-30T16:06:56.053046+00:00",
+  "source_zip": "GreenCall_SupplyChain_Dashboard_v1.4_GoogleSheets_AutoSync(2).zip",
+  "original_base_sha256": "a2e9684bb375d41ff6856ab3aae9775027c96c25e20ebd740514d7c0a86d857c",
+  "delivered_base_sha256": "a2e9684bb375d41ff6856ab3aae9775027c96c25e20ebd740514d7c0a86d857c",
+  "source_archive_entries": 70,
+  "files": [
+    {
+      "path": "CONFIGURAR_GOOGLE_SHEETS.cmd",
+      "bytes": 391
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/00_LEEME_PRIMERO.md",
+      "bytes": 757
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/01_CONSUMOS_GOOGLE.csv",
+      "bytes": 176
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/02_EXPORT1_CLARO.csv",
+      "bytes": 114
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/03_INVENTARIO_REAL.csv",
+      "bytes": 280
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/04_SERIES_SAP.csv",
+      "bytes": 84
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/05_CANTIDADES_SAP.csv",
+      "bytes": 100
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/06_EXISTENCIAS_ETA.csv",
+      "bytes": 146
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/07_DESPACHOS_SER.csv",
+      "bytes": 137
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/08_DESPACHOS_NO_SER.csv",
+      "bytes": 111
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/09_ROTACION_TECNICOS.csv",
+      "bytes": 165
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/10_DEVOLUCION_ROTACION.csv",
+      "bytes": 129
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/11_TOMAS_FISICAS.csv",
+      "bytes": 139
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/12_CATALOGO_SKUS.csv",
+      "bytes": 159
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/13_COBROS.csv",
+      "bytes": 149
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/14_TALLER.csv",
+      "bytes": 73
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/15_RECEPCIONES.csv",
+      "bytes": 89
+    },
+    {
+      "path": "FORMATOS_IMPORTACION/16_TECNICOS.csv",
+      "bytes": 46
+    },
+    {
+      "path": "README_LOCAL.md",
+      "bytes": 2712
+    },
+    {
+      "path": "README_PRIMERO.md",
+      "bytes": 3452
+    },
+    {
+      "path": "README_V141.md",
+      "bytes": 2626
+    },
+    {
+      "path": "RUN_LOCAL.cmd",
+      "bytes": 768
+    },
+    {
+      "path": "VALIDATE_LOCAL.cmd",
+      "bytes": 456
+    },
+    {
+      "path": "docs/ARQUITECTURA.md",
+      "bytes": 2529
+    },
+    {
+      "path": "docs/AUDITORIA_Y_MATRIZ_V141.md",
+      "bytes": 6764
+    },
+    {
+      "path": "docs/CHANGELOG_V141.md",
+      "bytes": 2881
+    },
+    {
+      "path": "docs/COBERTURA_ORIGEN.json",
+      "bytes": 2168
+    },
+    {
+      "path": "docs/DICCIONARIO_KPIS.md",
+      "bytes": 2612
+    },
+    {
+      "path": "docs/FUENTES_DE_DATOS.md",
+      "bytes": 2463
+    },
+    {
+      "path": "docs/GOOGLE_SHEETS_AUTOSYNC.md",
+      "bytes": 7210
+    },
+    {
+      "path": "docs/METODOLOGIA_FORECAST.md",
+      "bytes": 1893
+    },
+    {
+      "path": "docs/METODOLOGIA_INVENTARIO_REAL.md",
+      "bytes": 1429
+    },
+    {
+      "path": "docs/METODOLOGIA_ROTACION.md",
+      "bytes": 1038
+    },
+    {
+      "path": "docs/METODOLOGIA_SUPER_ABC.md",
+      "bytes": 929
+    },
+    {
+      "path": "docs/QA_AUTOMATICO.json",
+      "bytes": 3231
+    },
+    {
+      "path": "docs/QA_EJECUCION_V141.md",
+      "bytes": 1700
+    },
+    {
+      "path": "docs/QA_FINAL.md",
+      "bytes": 4486
+    },
+    {
+      "path": "docs/QA_GOOGLE_SHEETS_V1_4.md",
+      "bytes": 2184
+    },
+    {
+      "path": "docs/QA_HTTP_V13.json",
+      "bytes": 2188
+    },
+    {
+      "path": "docs/QA_NAVEGADOR.json",
+      "bytes": 2405
+    },
+    {
+      "path": "docs/QA_RENDIMIENTO.json",
+      "bytes": 272
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_administracion.png",
+      "bytes": 345789
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_cobros.png",
+      "bytes": 317000
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_consumos.png",
+      "bytes": 319974
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_despachos.png",
+      "bytes": 321884
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_forecast.png",
+      "bytes": 327009
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_inventario.png",
+      "bytes": 316421
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_resumen.png",
+      "bytes": 333675
+    },
+    {
+      "path": "docs/QA_VISUAL/desktop_taller.png",
+      "bytes": 312584
+    },
+    {
+      "path": "docs/QA_VISUAL/mobile_inventario.png",
+      "bytes": 104667
+    },
+    {
+      "path": "docs/QA_VISUAL/mobile_resumen.png",
+      "bytes": 108569
+    },
+    {
+      "path": "docs/RECONCILIACION_CONSUMOS.json",
+      "bytes": 2498
+    },
+    {
+      "path": "local-data/base.json",
+      "bytes": 86387389
+    },
+    {
+      "path": "local-server.mjs",
+      "bytes": 14738
+    },
+    {
+      "path": "package.json",
+      "bytes": 817
+    },
+    {
+      "path": "public/assets/app.js",
+      "bytes": 56914
+    },
+    {
+      "path": "public/assets/claro.png",
+      "bytes": 12855
+    },
+    {
+      "path": "public/assets/greencall.jpeg",
+      "bytes": 57093
+    },
+    {
+      "path": "public/assets/plotly.min.js",
+      "bytes": 4838938
+    },
+    {
+      "path": "public/assets/styles.css",
+      "bytes": 19258
+    },
+    {
+      "path": "public/index.html",
+      "bytes": 3946
+    },
+    {
+      "path": "src/business.mjs",
+      "bytes": 17199
+    },
+    {
+      "path": "src/core.mjs",
+      "bytes": 47830
+    },
+    {
+      "path": "src/import-commit.mjs",
+      "bytes": 2191
+    },
+    {
+      "path": "src/index.js",
+      "bytes": 525
+    },
+    {
+      "path": "src/insights.mjs",
+      "bytes": 9099
+    },
+    {
+      "path": "src/security.mjs",
+      "bytes": 275
+    },
+    {
+      "path": "src/sheets-sync.mjs",
+      "bytes": 17736
+    },
+    {
+      "path": "src/xlsx.mjs",
+      "bytes": 4126
+    },
+    {
+      "path": "supabase/migrations/20261027_001_supplychain_scaffold.sql",
+      "bytes": 4577
+    },
+    {
+      "path": "supabase/migrations/README.md",
+      "bytes": 220
+    },
+    {
+      "path": "tools/qa.mjs",
+      "bytes": 9046
+    },
+    {
+      "path": "tools/qa_extended.mjs",
+      "bytes": 4846
+    },
+    {
+      "path": "tools/qa_hardening.mjs",
+      "bytes": 3136
+    },
+    {
+      "path": "tools/qa_http_v141.mjs",
+      "bytes": 3651
+    },
+    {
+      "path": "tools/qa_performance.mjs",
+      "bytes": 1105
+    },
+    {
+      "path": "tools/qa_sheets_sync.mjs",
+      "bytes": 7496
+    },
+    {
+      "path": "wrangler.jsonc",
+      "bytes": 221
+    }
+  ]
+}

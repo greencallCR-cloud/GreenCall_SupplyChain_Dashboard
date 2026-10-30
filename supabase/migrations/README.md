@@ -1,0 +1,1 @@
+SQL creado como **scaffold no destructivo**. No ejecutar en producción sin aprobación, revisión de seguridad RLS y adaptación de permisos. No se incluyen secretos ni perfiles de usuario; no hay `DROP` ni `TRUNCATE`.

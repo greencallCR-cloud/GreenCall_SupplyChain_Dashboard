@@ -1,0 +1,117 @@
+{
+  "at": "2026-10-30T16:05:33.134Z",
+  "passed": 25,
+  "failed": 0,
+  "results": [
+    {
+      "name": "CSV Consumos íntegro: 173.761 registros con origen conciliado",
+      "result": "PASS"
+    },
+    {
+      "name": "Órdenes únicas válidas desde Google, sin tab ODT",
+      "result": "PASS"
+    },
+    {
+      "name": "Cobertura temporal Consumos desde 2022 hasta 2026",
+      "result": "PASS"
+    },
+    {
+      "name": "Todas las líneas Consumos preservan su fila y sin PII de clientes",
+      "result": "PASS"
+    },
+    {
+      "name": "Excluir SKU fuera de catálogo, servicios, 7005189 de consumo material",
+      "result": "PASS"
+    },
+    {
+      "name": "Órdenes / apariciones no suman cantidades y unidades incompatibles",
+      "result": "PASS"
+    },
+    {
+      "name": "ABC de costo / frecuencia separado y sin imputar cero",
+      "result": "PASS"
+    },
+    {
+      "name": "Cantidad de consumo aberrante identificada y retenida en base cruda",
+      "result": "PASS"
+    },
+    {
+      "name": "Catálogo: 50 filas; excepciones de precio sin ceros inventados",
+      "result": "PASS"
+    },
+    {
+      "name": "Bodega y técnicos incluidos: inventario completo 3.707 filas",
+      "result": "PASS"
+    },
+    {
+      "name": "Inventario monetario acreditado sin IVA, IVA 13%, total",
+      "result": "PASS"
+    },
+    {
+      "name": "No mezclar coste conocido de stock con consumibles físicos sin costo",
+      "result": "PASS"
+    },
+    {
+      "name": "Despachos: 20.321 líneas reales, órdenes distintas conciliables, no líneas",
+      "result": "PASS"
+    },
+    {
+      "name": "Cobros estado Detalle, excluir 7005189, preservar IVA fuente",
+      "result": "PASS"
+    },
+    {
+      "name": "Devoluciones taller con series distintas; tasa daños no inventada",
+      "result": "PASS"
+    },
+    {
+      "name": "Pronósticos de órdenes y SKU con horizonte >=6 meses",
+      "result": "PASS"
+    },
+    {
+      "name": "Historial actual es fuente Google, series adicionales Claro sin sumarse",
+      "result": "PASS"
+    },
+    {
+      "name": "IVA 13% con precio de catálogo contextual sin fabricar costo",
+      "result": "PASS"
+    },
+    {
+      "name": "Despacho sin acta unifica pestañas por técnico+fecha",
+      "result": "PASS"
+    },
+    {
+      "name": "Despacho con acta cuenta solo acta aunque cambie pestaña",
+      "result": "PASS"
+    },
+    {
+      "name": "Despacho sin fecha ni acta queda irresoluble",
+      "result": "PASS"
+    },
+    {
+      "name": "Fecha y moneda CRC interpretadas sin alterar zonas ni separadores",
+      "result": "PASS"
+    },
+    {
+      "name": "Idempotencia de carga duplicada y reemplazo corregido",
+      "result": "PASS"
+    },
+    {
+      "name": "Inventario SAP/ETA aplica exclusión de serie ya consumida",
+      "result": "PASS"
+    },
+    {
+      "name": "Tipos importador y parser por encabezados, no nombre archivo",
+      "result": "PASS"
+    }
+  ],
+  "metrics": {
+    "google_source_rows": 173761,
+    "unique_orders": 17290,
+    "material_lines": 139554,
+    "unique_dispatches": 478,
+    "dispatch_unresolved": 654,
+    "inventory_base": 106001382.14000106,
+    "inventory_iva": 13780179.678200139,
+    "forecast_sku": 44
+  }
+}

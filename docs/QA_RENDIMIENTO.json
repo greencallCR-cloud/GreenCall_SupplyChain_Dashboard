@@ -1,0 +1,12 @@
+{
+  "mode": "REGISTROS_REALES_SANITIZADOS",
+  "google_rows": 173761,
+  "elapsed_ms": 6532,
+  "rss_mb": 427,
+  "unique_orders": 17290,
+  "material_lines": 139554,
+  "dispatch_orders": 478,
+  "forecast_skus": 44,
+  "output_json_mb": 3.1,
+  "at": "2026-10-30T16:06:31.278Z"
+}

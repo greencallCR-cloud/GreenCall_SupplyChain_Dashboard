@@ -1,0 +1,80 @@
+{
+  "google_consumos": {
+    "rows": 173761,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "cfb69414bbb942e83221e6679f8ce74d6a2c32307f7458fcff6b9c9d5ecb2673"
+  },
+  "inventory_real": {
+    "rows": 3707,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "2327d068a14dc422caf631a51c541ba121d5b9134a42f06af70ca0cacf959b2e"
+  },
+  "dispatch_serial": {
+    "rows": 17367,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "aa7c7a435e0c2077de9d91897a8571a7ee8bf1b24581c9f9a6f10cc4124b7218"
+  },
+  "dispatch_nonserial": {
+    "rows": 2954,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "43093fe4840a5ff58ab2fe1ef95709774d9c23198dde9f7d90828d775d79d83b"
+  },
+  "sku_catalog": {
+    "rows": 50,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "c532ad88f4e25ac7430f73e233f42af6233ff1022b74aa7971650ac65efaf0c6"
+  },
+  "charges": {
+    "rows": 786,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "4c952af9388e4ad5b719f257d3f1d43aae513f3c6d20a03e3efc5258d51f193d"
+  },
+  "workshop": {
+    "rows": 624,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "cbb00da23feb93982a1cd9d8aa2422de5d2711903939e5cd88b1f91fc71fbb5e"
+  },
+  "rotation_tech": {
+    "rows": 3479,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "83e9cf8ba4f79bec06143c475030c0f00c22a18f3ce602f0460c2433b7d1fc95"
+  },
+  "rotation_returns": {
+    "rows": 3479,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "66537fd44a6da62c76528609ac2820403f18735a39ac81669fe40474aa1c8f35"
+  },
+  "eta": {
+    "rows": 8425,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "e8880cc9fc6c569bd580289aa8bb6c6a150967780c5c35b1768780058c3dd280"
+  },
+  "sap_serials": {
+    "rows": 3983,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "af990882bf0c983a6d8a2b583658be0936bba713bf2fea62db42dfbe947a1f41"
+  },
+  "sap_quantities": {
+    "rows": 34,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "2a7a236293fca8c3a6eb2ef8578397b21f6c2efb474e06192af9f5c69733d665"
+  },
+  "technicians": {
+    "rows": 36,
+    "empties": 0,
+    "invalid": 0,
+    "source_sha256": "b86c86370979e8a6383a0d138601a03a0dd3c75eddbc9905df5b9d9b2d294d37"
+  }
+}

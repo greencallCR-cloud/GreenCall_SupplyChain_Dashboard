@@ -1,0 +1,114 @@
+{
+  "at": "2026-10-28",
+  "passed": 13,
+  "failed": 0,
+  "results": [
+    {
+      "name": "Local index",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 3856,
+      "elapsed_ms": 11
+    },
+    {
+      "name": "Logo Claro",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 12855,
+      "elapsed_ms": 1
+    },
+    {
+      "name": "Logo GreenCall",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 57093,
+      "elapsed_ms": 1
+    },
+    {
+      "name": "Plotly local",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 4838938,
+      "elapsed_ms": 15
+    },
+    {
+      "name": "Client JS",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 50686,
+      "elapsed_ms": 1
+    },
+    {
+      "name": "Status fuente",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 587,
+      "elapsed_ms": 1
+    },
+    {
+      "name": "Dashboard datos reales",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 3126417,
+      "elapsed_ms": 18
+    },
+    {
+      "name": "Dashboard octubre 2026",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 2808423,
+      "elapsed_ms": 1969
+    },
+    {
+      "name": "Dashboard por SKU válido",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 1799224,
+      "elapsed_ms": 1953
+    },
+    {
+      "name": "Consulta paginada Consumos",
+      "http": 200,
+      "expected": 200,
+      "ok": true,
+      "bytes": 10536,
+      "elapsed_ms": 1
+    },
+    {
+      "name": "Seguridad preview requiere login",
+      "http": 401,
+      "expected": 401,
+      "ok": true,
+      "bytes": 112,
+      "elapsed_ms": 1
+    },
+    {
+      "name": "Seguridad apply requiere login",
+      "http": 401,
+      "expected": 401,
+      "ok": true,
+      "bytes": 112,
+      "elapsed_ms": 1
+    },
+    {
+      "name": "Seguridad config escritura",
+      "http": 401,
+      "expected": 401,
+      "ok": true,
+      "bytes": 112,
+      "elapsed_ms": 1
+    }
+  ],
+  "filtered_orders_oct2026": 861,
+  "selected_sku_lines": 24629,
+  "integrated_data_rows": 173761
+}
