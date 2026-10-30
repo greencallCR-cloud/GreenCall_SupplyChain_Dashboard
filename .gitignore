@@ -1,0 +1,21 @@
+# Dependencias generadas
+node_modules/
+.vercel/
+coverage/
+
+# Secretos y configuración privada
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials/
+*service-account*.json
+
+# Base operativa: nunca publicar el histórico en GitHub / sitio estático
+local-data/base.json
+local-data/settings.json
+local-data/sheets-sync.json
+local-data/*.backup
+local-data/*.bak
+local-data/*.tmp*
