@@ -2,6 +2,15 @@
 
 > Este documento SE DEBE ACTUALIZAR EN CADA HITO VERIFICADO y commitear. En nueva tarea, se lee junto con AGENTS.md. No escribir secretos ni datos personales.
 
+## Estado vigente para retomar — 31/10/2026, 15:53 America/Costa_Rica
+- Rama publicada: `codex/greencall-v2`, basada en `develop-cloud`; PR #1 permanece en borrador. No reiniciar desde `main` ni rehacer los hitos siguientes.
+- Código de aplicación verificado: `8b7d3b76a51ea5a7cf3702b1d07896ba46567bea`; CI añadido en `e093cce704940f6d690277684c257770e2fa906e`. El último commit de documentación se consulta con `git log -1`; no se intenta incluir su propio hash dentro de sí mismo.
+- Resultado final local: 73 tests Node aprobados y tres optativas omitidas; Sheets 13/13, hardening 9/9. PostgreSQL aislado + límites/175k: 23/23. Validación estadística: 27/27 y referencia independiente sintética. UI final: 225 recorridos, 52 auditorías axe sin violaciones detectadas y 22 flujos, sin overflow. Dieciséis auditorías tienen comprobaciones SVG/Plotly no resueltas automáticamente; no equivale a certificación WCAG completa.
+- CI real de `e093cce`: **cuatro jobs aprobados** (Node 22, Node 24, integridad PostgreSQL, referencia estadística), run `41245525373`. Se deduplican eventos push/PR por rama en la configuración posterior.
+- Vercel confirmó success para `8b7d3b7`. Preview observado: `https://greencall-supplychain-da-git-8b820b-greencallcr-clouds-projects.vercel.app`; el visitante sin credenciales recibe SSO. No se certificó API autenticada remota.
+- Bloqueos: entorno sin credenciales runtime para Sheets/Neon ni claves de acceso Cloud. Falta el histórico privado; QA histórica conserva 15 fallos explícitos. No hay cambios remotos de esquema, costos o fuentes.
+- Próximo hito: importación física persistente Cloud con rol de escritura separado y activación CAS; después medición real de lecturas/agregados Neon en una rama aislada. Antes de conectarla, comprobar secretos y roles sin imprimir valores. Mantener Sheets sólo lectura.
+
 ## Baseline de arranque (31/10/2026)
 - Repo: `greencallCR-cloud/GreenCall_SupplyChain_Dashboard`; en último chequeo conocido GitHub declaró `visibility: public`; confirmar de nuevo.
 - Código de trabajo: `develop-cloud`, con Cloud Stage1. Rama nueva recomendada `codex/greencall-v2` **desde develop-cloud**; no resetear ni borrar rama antigua.
@@ -83,6 +92,14 @@
 - Suite técnica repetida después de la corrección: 73 aprobadas, tres optativas omitidas; Sheets 13/13, hardening 9/9; sintaxis de 47 archivos. PostgreSQL/frontera/175k del hito anterior: 23/23.
 - Cierre visual anterior repetido por el agente principal: **225 recorridos, 52 auditorías axe y 20 flujos aprobados**. Artifacts locales `/workspace/work/ui-regression-full/`. La última tabla de horizontes está en repetición completa adicional; no se confunde con ese reporte. Las comprobaciones SVG/Plotly que axe no resuelve requieren revisión manual.
 - Próxima acción inmediata: leer `/workspace/work/ui-horizon-final/results.json` y `work/ui-horizon-final.log`; corregir cualquier fallo, registrar SHA del commit de este hito y verificar su Preview. Después priorizar importación física persistente Cloud y medición de lecturas Neon con una rama/credencial de desarrollo disponible; no introducir datos o secretos en Git.
+
+### Cierre verificado de los hitos
+- `70cd5fd`: integridad de snapshots, worker concurrente, exportaciones privadas, accesibilidad y reloj coherente del sincronizador.
+- `8b7d3b7`: selección externa anidada, plazos parciales alineados, tabla multihorizonte y referencias reproducibles. Publicado y Preview success.
+- `e093cce`: CI real sobre la rama de desarrollo. Run https://github.com/greencallCR-cloud/GreenCall_SupplyChain_Dashboard/actions/runs/41245525373 con los cuatro jobs aprobados; no usa secretos ni datos operativos. El job PostgreSQL ejecuta los casos optativos omitidos en el job Node.
+- Reporte final de navegador leído: `/workspace/work/ui-horizon-final/results.json`, `success:true`, 225 recorridos, 52 auditorías, 22 flujos, cero violaciones detectadas y cero overflow. Capturas de escritorio/móvil inspeccionadas. Toda pantalla poblada del runner usa fixtures sintéticos explícitos; las capturas públicas sin datos no revelan operación.
+- Revisiones materiales cerradas con pruebas: integridad/corrupción/CAS, preservación física, límite JSON, tipo inicial del explorador, contraste, foco modal, skip link, diferencia entre captura y sincronización y desplazamiento temporal del backtest. Pendientes declarados: revisión visual manual de SVG, autenticación individual/roles y rate limit persistente antes de producción, histórico real y backend autorizado, persistencia física Cloud y rendimiento remoto.
+- Workspace y rama se conservan para continuar; no se crea automatización de reanudación ni se promete ejecución futura sin tarea activa.
 
 ## Recuperación después de límite/cuota o nueva conversación
 1. Reabrir este repositorio/entorno Codex publicado.
