@@ -74,6 +74,16 @@
 - `forecast_horizons` dejó implementados y probados seis nuevos contratos de evaluación anidada a 3/6/12 meses y amplió la referencia Statsmodels/Polars. Sus archivos se conservan, pero se confirmarán en un commit separado tras revisión y exposición en la UI.
 - El runner visual aún necesita cerrar su recorrido de descargas; los 225 recorridos y auditorías iniciales no se confunden con ese cierre pendiente. No certificar el hito visual completo hasta leer su reporte exitoso.
 
+## Hito de validación multihorizonte — 31/10/2026
+- Hito de integridad/exportaciones confirmado y publicado en `70cd5fdbb7b1893bb9bc522604146f7e34fe9e1a`. GitHub confirmó Vercel success para ese SHA. Se mantiene PR #1 en borrador; no se integró a `develop-cloud` ni `main`.
+- `src/forecast.mjs`: evaluación externa anidada a 3/6/12 meses. En cada corte se repite la selección sobre el prefijo de entrenamiento y se compara con naïve en los mismos objetivos. Se exigen tres cortes completos, máximo seis; métricas nulas si falta evidencia. Se documenta el solapamiento y no se inventan intervalos.
+- UI: selector de horizonte actualiza una tabla independiente para material y órdenes, con MAE/WAPE/sMAPE, baseline, cortes y tramos evaluados. Las métricas de selección a un mes permanecen etiquetadas como tales.
+- Revisión independiente `horizon_final_review` encontró un P2: los meses parciales desplazaban las predicciones, pero no los plazos de validación. Test rojo reproducido y corrección verde: ambos usan el mismo desplazamiento; los tramos se muestran en pantalla. No quedaron otros hallazgos materiales en esa revisión.
+- Pruebas estadísticas: 27/27, incluida perturbación de objetivos futuros sin alterar selección/predicción del corte. Referencia independiente Statsmodels/Polars repetida: coincide en los 18 cortes externos sintéticos y métricas; no es validación del histórico operativo. Benchmark separado de 44 series sintéticas × 53 meses: 101 ms y 894.304 bytes de resultados en esta máquina; no extrapolar a p95 remoto.
+- Suite técnica repetida después de la corrección: 73 aprobadas, tres optativas omitidas; Sheets 13/13, hardening 9/9; sintaxis de 47 archivos. PostgreSQL/frontera/175k del hito anterior: 23/23.
+- Cierre visual anterior repetido por el agente principal: **225 recorridos, 52 auditorías axe y 20 flujos aprobados**. Artifacts locales `/workspace/work/ui-regression-full/`. La última tabla de horizontes está en repetición completa adicional; no se confunde con ese reporte. Las comprobaciones SVG/Plotly que axe no resuelve requieren revisión manual.
+- Próxima acción inmediata: leer `/workspace/work/ui-horizon-final/results.json` y `work/ui-horizon-final.log`; corregir cualquier fallo, registrar SHA del commit de este hito y verificar su Preview. Después priorizar importación física persistente Cloud y medición de lecturas Neon con una rama/credencial de desarrollo disponible; no introducir datos o secretos en Git.
+
 ## Recuperación después de límite/cuota o nueva conversación
 1. Reabrir este repositorio/entorno Codex publicado.
 2. Leer `AGENTS.md` y este checkpoint, mirar SHA real y git status/diff.

@@ -108,15 +108,10 @@ function prediction(name, values, horizon) {
   return result.every(Number.isFinite) ? result.map(x => Math.max(0, x)) : null;
 }
 
-export function forecastOne(values, months, horizon = 6) {
-  if (!finiteDemand(values) || !Array.isArray(months) || values.length !== months.length || !months.every(validMonth)
-    || months.some((m, i) => i > 0 && monthIndex(m) !== monthIndex(months[i - 1]) + 1)) {
-    throw new TypeError('Forecast requires finite nonnegative values on an aligned consecutive monthly grid.');
-  }
-  if (!Number.isInteger(horizon) || horizon < 1 || horizon > 160) throw new RangeError('Invalid forecast horizon.');
+// Shared by the final refit and each outer validation fold. Only this training
+// prefix may determine eligibility, ranking and applicability of its model.
+function selectForecast(values, months, horizon) {
   const n = values.length;
-  const base = {model:'Sin datos',pred:[],low:[],high:[],confidence:'NO CALCULABLE',mae:null,wape:null,smape:null,pattern:'Desconocido',observations:n,backtests:0,candidate_count:0,interval_method:'NO_CALIBRADO',training_start:months[0]||null,training_end:months.at(-1)||null,forecast_months:nextMonths(months.at(-1),horizon),forecast_start:nextMonths(months.at(-1),1)[0]||null};
-  if (!n) return {...base,evaluation:{method:'SIN_VALIDACION',horizon:1,candidates:[]}};
   // Every candidate is scored against the same last (at most six) targets.
   // Eligibility uses only the prefix before those targets, including pattern and positivity.
   const firstOrigin = Math.max(2, n - 6), canEvaluate = n >= 4;
@@ -136,12 +131,60 @@ export function forecastOne(values, months, horizon = 6) {
   // A model also has to remain applicable to the complete refit, e.g. multiplicative seasonality needs positive data.
   if (selected && !prediction(selected.name, values, horizon)) selected = ranked.find(x=>prediction(x.name,values,horizon));
   const winner = selected?.name || 'naive', projected = prediction(winner, values, horizon);
+  return {selected,winner,projected,candidates,
+    evaluation:{method:canEvaluate?'ROLLING_ORIGIN':'SIN_VALIDACION',horizon:1,selection_metric:selected?(selected.wape===null?'MAE':'WAPE'):null,eligibility_as_of:canEvaluate?months[firstOrigin-1]:null,pattern_at_eligibility:canEvaluate?demandPattern(prefix).pattern:null,parameters:'Coeficientes fijos; sin ajuste sobre validación.',candidates},
+  };
+}
+
+function evaluateHorizons(values, months, leadOffset=0) {
+  const minTraining=8, minOrigins=3, maxOrigins=6;
+  return Object.fromEntries([3,6,12].map(horizon => {
+    const availableOrigins=Math.min(maxOrigins,Math.max(0,values.length-horizon-leadOffset-minTraining+1));
+    const base={method:'NESTED_ROLLING_ORIGIN',evaluated_subject:'MODEL_SELECTION_PROCEDURE',
+      status:'DATOS_INSUFICIENTES',horizon,observed_horizon:null,lead_start:leadOffset+1,lead_end:leadOffset+horizon,selection_horizon:1,
+      min_training_observations:minTraining,min_origins:minOrigins,max_origins:maxOrigins,
+      available_origins:availableOrigins,backtests:0,observations:0,...forecastMetrics([],[]),
+      baseline:{model:'naive',...forecastMetrics([],[])},origins:[],
+      aggregation:'ALL_ORIGIN_TARGET_PAIRS',
+      overlap_note:'Los orígenes mensuales pueden solaparse; cada par origen-mes pesa igual y los errores no son independientes.',
+      reason:'Se requieren al menos tres orígenes completos, con ocho meses previos para selección interna a un mes.',
+    };
+    if (availableOrigins<minOrigins) return [horizon,base];
+    const origins=[];
+    for (let t=values.length-horizon-leadOffset-availableOrigins+1; t<=values.length-horizon-leadOffset; t++) {
+      const prefix=values.slice(0,t), selection=selectForecast(prefix,months.slice(0,t),horizon+leadOffset);
+      origins.push({train_end:months[t-1],training_observations:t,
+        selected_model:selection.winner,selection_metric:selection.evaluation.selection_metric,
+        inner_backtests:selection.selected?.folds.length||0,eligibility_as_of:selection.evaluation.eligibility_as_of,
+        months:months.slice(t+leadOffset,t+leadOffset+horizon),actual:values.slice(t+leadOffset,t+leadOffset+horizon),
+        predicted:selection.projected.slice(leadOffset),baseline_predicted:prediction('naive',prefix,horizon+leadOffset).slice(leadOffset),
+      });
+    }
+    const actual=origins.flatMap(x=>x.actual);
+    return [horizon,{...base,status:'EVALUADO',observed_horizon:horizon,backtests:origins.length,observations:actual.length,
+      ...forecastMetrics(actual,origins.flatMap(x=>x.predicted)),
+      baseline:{model:'naive',...forecastMetrics(actual,origins.flatMap(x=>x.baseline_predicted))},origins,reason:null,
+    }];
+  }));
+}
+
+export function forecastOne(values, months, horizon = 6, {leadOffset=0}={}) {
+  if (!finiteDemand(values) || !Array.isArray(months) || values.length !== months.length || !months.every(validMonth)
+    || months.some((m, i) => i > 0 && monthIndex(m) !== monthIndex(months[i - 1]) + 1)) {
+    throw new TypeError('Forecast requires finite nonnegative values on an aligned consecutive monthly grid.');
+  }
+  if (!Number.isInteger(horizon) || horizon < 1 || horizon > 160) throw new RangeError('Invalid forecast horizon.');
+  if(!Number.isInteger(leadOffset)||leadOffset<0||leadOffset>160)throw new RangeError('Invalid validation lead offset.');
+  const n = values.length, by_horizon=evaluateHorizons(values,months,leadOffset);
+  const base = {model:'Sin datos',pred:[],low:[],high:[],confidence:'NO CALCULABLE',mae:null,wape:null,smape:null,pattern:'Desconocido',observations:n,backtests:0,candidate_count:0,interval_method:'NO_CALIBRADO',training_start:months[0]||null,training_end:months.at(-1)||null,forecast_months:nextMonths(months.at(-1),horizon),forecast_start:nextMonths(months.at(-1),1)[0]||null};
+  if (!n) return {...base,evaluation:{method:'SIN_VALIDACION',horizon:1,candidates:[],by_horizon}};
+  const {selected,winner,projected,candidates,evaluation}=selectForecast(values,months,horizon);
   const pred = projected.map(x=>Math.round(x*100)/100), backtests=selected?.folds.length||0;
   return {...base,...demandPattern(values),model:winner,pred,low:pred.map(()=>null),high:pred.map(()=>null),
     mae:selected?.mae??null,wape:selected?.wape??null,smape:selected?.smape??null,backtests,candidate_count:candidates.length,
     confidence:backtests<3?'SIN VALIDAR':backtests<6?'LIMITADA':selected.wape!==null&&selected.wape<30?'MEDIA':'BAJA',
     confidence_basis:'Grado heurístico del backtest a un mes; no es probabilidad ni validación de los 12 meses.',
-    evaluation:{method:canEvaluate?'ROLLING_ORIGIN':'SIN_VALIDACION',horizon:1,selection_metric:selected?(selected.wape===null?'MAE':'WAPE'):null,eligibility_as_of:canEvaluate?months[firstOrigin-1]:null,pattern_at_eligibility:canEvaluate?demandPattern(prefix).pattern:null,parameters:'Coeficientes fijos; sin ajuste sobre validación.',candidates},
+    evaluation:{...evaluation,by_horizon},
   };
 }
 
@@ -163,7 +206,7 @@ export function forecastMonthly(values, months, {horizon=12, cutoff=null, covera
   }
   const anchor = cutoff && validMonth(cutoff.slice(0,7)) && cutoff.slice(0,7)>(months.at(-1)||'') ? cutoff.slice(0,7) : months.at(-1);
   const skipped = trainingMonths.length ? Math.max(0,monthIndex(anchor)-monthIndex(trainingMonths.at(-1))) : 0;
-  const forecast = forecastOne(trainingValues,trainingMonths,horizon+skipped);
+  const forecast = forecastOne(trainingValues,trainingMonths,horizon+skipped,{leadOffset:skipped});
   for(const key of ['pred','low','high']) forecast[key]=forecast[key].slice(skipped);
   forecast.forecast_months=forecast.pred.length?nextMonths(anchor,horizon):[];
   forecast.forecast_start=forecast.forecast_months[0]||null;

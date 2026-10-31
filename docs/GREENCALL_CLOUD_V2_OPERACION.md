@@ -59,7 +59,7 @@ npm run cloud:dev
 
 `npm test` ejecuta contratos sintéticos explícitos, HTTP real de los handlers, pronósticos y regresiones de sincronización/seguridad. No certifica el histórico privado ausente. `npm run validate`, `npm run perf` y `npm run http-qa` conservan sus exigencias de paridad histórica: requieren el respaldo privado completo en `local-data/base.json` y no deben reportarse como exitosos con una base vacía.
 
-`tools/forecast_reference_input.mjs` y `tools/qa_forecast_reference.py` permiten contrastar los cálculos con Statsmodels/Polars en un entorno Python de trabajo. No son dependencias de producción. El backtest actual evalúa un paso mensual y hasta seis orígenes; las proyecciones a 3/6/12 meses no equivalen a precisión verificada en esos horizontes. No se muestran bandas de probabilidad sin calibración.
+`tools/forecast_reference_input.mjs` y `tools/qa_forecast_reference.py` permiten contrastar los cálculos con Statsmodels/Polars en un entorno Python de trabajo. No son dependencias de producción. El selector compara candidatos a un paso. Una evaluación externa separada repite esa selección con el pasado de cada corte y puntúa 3/6/12 meses contra la última observación, con tres a seis cortes completos. Si se salta un mes parcial, evalúa los mismos plazos desplazados que se muestran en la proyección. Los cortes pueden solaparse; se declara la ponderación por par corte–mes. La pantalla distingue el error del selector a un mes de la evaluación multimes del procedimiento. Sin historia suficiente, las métricas quedan sin calcular. No se muestran bandas de probabilidad sin calibración ni se certifica precisión operativa con fixtures sintéticos.
 
 ## Pendientes de producción
 

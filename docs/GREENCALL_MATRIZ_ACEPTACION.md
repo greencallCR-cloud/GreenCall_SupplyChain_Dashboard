@@ -16,10 +16,10 @@ La palabra «VERIFICADO» requiere evidencia de código + prueba + fuente/corte;
 | PHYS01 | Excel físico | preview, dos tomas por técnico/SKU, ajustes, idempotencia y rollback | NO VERIFICADO CLOUD |
 | ABC01 | Super ABC | valor y frecuencia, matriz y sin costos falsos | NO VERIFICADO CLOUD |
 | FCAST01 | Órdenes y SKU | cortes mensuales, baseline y modelo por serie | NO VERIFICADO CLOUD |
-| FCAST02 | Selección estadística | rolling-origin sin fuga, WAPE/MAE/sMAPE, intermitentes | VERIFICADO CON FIXTURES: forecast-v2 y referencias Statsmodels/Polars. Evaluación h=1; falta certificación operativa y horizontes mayores |
+| FCAST02 | Selección estadística | rolling-origin sin fuga, WAPE/MAE/sMAPE, intermitentes | VERIFICADO CON FIXTURES: selector h=1 y evaluación externa anidada h=3/6/12; plazos desplazados por meses parciales, 27 tests y referencias Statsmodels/Polars. Falta certificación operativa |
 | FCAST03 | No serializados | despacho como proxy, consumo físico con dos conteos | NO VERIFICADO CLOUD |
 | SYNC01 | Actualización Sheets | readonly, schema drift, reintentos, filas nuevas/corregidas, integridad | ADAPTADOR VERIFICADO: qa_sheets_sync 13/13; worker con bloqueo/CAS y preservación física. Falta credencial del runtime |
-| UX01 | UI profesional | diseño y tooltips, código/descripcion, filtros, mobile/tablet/desktop | NO VERIFICADO NUEVA VERSIÓN |
+| UX01 | UI profesional | diseño y tooltips, código/descripcion, filtros, mobile/tablet/desktop | VERIFICADO CON FIXTURES: 225 recorridos, 52 auditorías axe sin violaciones detectadas y 20 flujos. SVG/Plotly requiere revisión manual adicional; última ampliación de horizonte en repetición |
 | OPS01 | Vercel API | Preview `/api/status`, `/api/dashboard`, `/api/rows` y errores adecuados | PARCIAL: de8f643 Ready; URL observada protegida con 302 a SSO. Handlers/errores verificados por HTTP local |
 | OPS02 | Neon | permisos, schema, rendimiento, pruebas transaccionales y recovery | POSTGRESQL DESECHABLE VERIFICADO: inmutabilidad, activación, corrupción y CAS; benchmark sintético. Neon remoto no configurado aquí |
 | OPS03 | Continuidad | AGENTS leído, checkpoint y commit reproducible | VERIFICADO: recuperación de8f643 publicada; PR #1 en borrador hacia develop-cloud |
