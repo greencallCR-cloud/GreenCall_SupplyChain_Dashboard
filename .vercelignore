@@ -1,0 +1,9 @@
+local-data/
+work/
+docs/
+FORMATOS_IMPORTACION/
+.env*
+credentials/
+*.pem
+*.key
+*service-account*.json

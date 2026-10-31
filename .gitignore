@@ -2,6 +2,7 @@
 node_modules/
 .vercel/
 coverage/
+work/
 
 # Secretos y configuración privada
 .env
