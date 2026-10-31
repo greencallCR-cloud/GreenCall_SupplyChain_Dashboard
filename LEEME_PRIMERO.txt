@@ -1,0 +1,13 @@
+GREEN CALL — CODEX AUTÓNOMO V3 (31 OCT 2026)
+
+¡NO vuelvas a instalar las skills en el chat de instalación!
+
+1. Para garantizar lectura persistente, descomprime este ZIP y copia AGENTS.md + la carpeta docs/ dentro de la raíz de tu repositorio local en la rama develop-cloud (o arrastra el ZIP a una tarea nueva de Codex, si la interfaz admite adjuntos). Nunca reemplaces .git ni archivos de aplicación; conserva los demás docs.
+2. Revisa privacidad del repositorio (GitHub aparecía PUBLIC). Nunca subas base.json, costos/PII/secrets a un repo público. Si cambias a PRIVATE, revisa también el historial y credenciales pasadas.
+3. En GitHub Desktop: Current branch: develop-cloud; Show in Explorer; pega archivos; Changes -> Commit -> Push origin. Esto es SOLO documentación, no modifica la app. Opcionalmente Codex puede incorporar el ZIP por sí mismo si está montado en su nueva tarea.
+4. En Codex: clic en New chat del panel izquierdo, Work in/Cloud, selecciona el entorno YA PUBLICADO GreenCall_SupplyChain_Dashboard. Indica rama develop-cloud (o deja que cree codex/greencall-v2 desde ella) y adjunta/pega PROMPT_INICIO_CODEX.md.
+5. NO copies el prompt en el cuadro inferior 'Ask for follow-up changes' del viejo chat de instalación. Ese chat es para el setup del entorno.
+6. Para retomar tras límite de tokens: inicia tarea nueva con el mismo entorno y pega PROMPT_REANUDACION_CODEX.md. No hay reactivación garantizada cuando se restablece cuota.
+7. No pegues credenciales de Neon ni cuenta de servicio Google en el chat. Usa Environment variables / Network secrets del entorno si se necesitan. Google Sheets exclusivamente read-only.
+
+Rutas del ZIP: AGENTS.md en la RAÍZ del repositorio; docs/* dentro de docs; PROMPT_INICIO_CODEX.md y PROMPT_REANUDACION_CODEX.md son mensajes de usuario, no necesariamente deben subirse a GitHub.
