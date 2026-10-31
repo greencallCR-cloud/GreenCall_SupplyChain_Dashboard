@@ -33,6 +33,8 @@ test('authenticated dashboard and rows call real service contract with bounded q
  }
  const status=await (await api(req('/api/status',{headers}))).json();
  assert.equal(status.authenticated,true);assert.equal(status.data.state,'ready');
+ assert.equal(status.sheets.last_sync_at,null);
+ assert.equal(status.sheets.snapshot_at,'2026-10-30T12:00:00Z');
 });
 test('missing snapshot and unexpected private errors are explicit and sanitized',async()=>{
  for(const getDashboard of [async()=>null,async()=>{throw Error('postgres://secret@host PRIVATE DATA')}]){

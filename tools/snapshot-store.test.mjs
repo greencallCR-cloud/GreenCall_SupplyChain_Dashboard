@@ -112,11 +112,19 @@ function memoryAdapter() {
       if (failActivation) throw new Error('Injected private infrastructure detail');
       const row = draft.snapshots.get(params[0]);
       if (!complete(row, draft)) return [];
+      if (params.length > 1 && draft.active !== params[1] && draft.active !== row.id) return [];
       draft.active = row.id;
       return [{ id: row.id }];
     }
+    if (/SELECT snapshot_id AS id FROM greencall_private\.active_snapshot/.test(text)) {
+      return draft.active ? [{ id: draft.active }] : [];
+    }
     if (/FROM greencall_private\.active_snapshot/.test(text)) {
       const row = [...draft.snapshots.values()].find(r => r.id === draft.active);
+      return complete(row, draft) ? [row] : [];
+    }
+    if (/FROM greencall_private\.snapshots s/.test(text)) {
+      const row = draft.snapshots.get(params[0]);
       return complete(row, draft) ? [row] : [];
     }
     if (/FROM greencall_private\.snapshot_chunks/.test(text)) {
@@ -136,6 +144,7 @@ function memoryAdapter() {
     },
     setFailActivation: value => { failActivation = value; },
     setFailChunk: value => { failChunk = value; stagedChunks = 0; },
+    corruptStagedChunk: () => { const chunk = [...chunks.values()].find(row => row.snapshot_id !== active && row.source === 'google_consumos'); chunk.rows[0].quantity = 9; },
     truncateActiveChunk: () => { const chunk = [...chunks.values()].find(row => row.snapshot_id === active); chunk.rows.pop(); },
     removeActiveChunk: () => { const [identity] = [...chunks.entries()].find(([, row]) => row.snapshot_id === active); chunks.delete(identity); },
     get count() { return snapshots.size; },
@@ -161,6 +170,56 @@ test('publication is idempotent and atomically retains prior activation on failu
   assert.equal(adapter.count, 2);
   assert.notEqual(second.id, first.id);
   assert.equal((await repository.loadSnapshot()).data.tables.google_consumos[0].quantity, 8);
+});
+
+test('a corrupt resumed fragment cannot replace the last verified activation', async () => {
+  const adapter = memoryAdapter(), repository = createSnapshotRepository(adapter);
+  const first = await repository.publishSnapshot(fixture());
+  const corrected = fixture(); corrected.tables.google_consumos[0].quantity = 2;
+  adapter.setFailActivation(true);
+  await assert.rejects(repository.publishSnapshot(corrected), { code: 'SNAPSHOT_UNAVAILABLE' });
+  adapter.setFailActivation(false);
+  // Preserve the declared count and byte length: metadata-only checks miss this.
+  adapter.corruptStagedChunk();
+  await assert.rejects(repository.publishSnapshot(corrected), { code: 'INVALID_SNAPSHOT' });
+  assert.equal((await repository.loadSnapshot()).id, first.id);
+  assert.equal((await repository.getSnapshotStatus()).id, first.id);
+});
+
+test('activation compares the expected pointer and accepts idempotent retries', async () => {
+  const repository = createSnapshotRepository(memoryAdapter());
+  assert.equal(typeof repository.getActiveSnapshotId, 'function');
+  assert.equal(await repository.getActiveSnapshotId(), null);
+  const first = await repository.publishSnapshot(fixture(), { expectedSnapshotId: null });
+  assert.equal(await repository.getActiveSnapshotId(), first.id);
+  const corrected = fixture(); corrected.tables.google_consumos[0].quantity = 7;
+  await assert.rejects(repository.publishSnapshot(corrected, { expectedSnapshotId: null }), { code: 'SNAPSHOT_CONFLICT' });
+  assert.equal(await repository.getActiveSnapshotId(), first.id);
+  const second = await repository.publishSnapshot(corrected, { expectedSnapshotId: first.id });
+  assert.equal((await repository.publishSnapshot(corrected, { expectedSnapshotId: first.id })).id, second.id);
+  assert.equal(await repository.getActiveSnapshotId(), second.id);
+  const older = fixture(); older.tables.google_consumos[0].quantity = 5;
+  await assert.rejects(repository.publishSnapshot(older, { expectedSnapshotId: first.id }), { code: 'SNAPSHOT_CONFLICT' });
+  assert.equal((await repository.loadSnapshot()).id, second.id);
+});
+
+test('implicit expectation is captured before staging so a competing publisher wins safely', async () => {
+  const adapter = memoryAdapter(), repository = createSnapshotRepository(adapter);
+  const first = await repository.publishSnapshot(fixture());
+  const slow = fixture(); slow.tables.google_consumos[0].quantity = 5;
+  const newer = fixture(); newer.tables.google_consumos[0].quantity = 6;
+  let interleaved = false, winner;
+  const slowRepository = createSnapshotRepository({ ...adapter, query: async (text, values) => {
+    const result = await adapter.query(text, values);
+    if (!interleaved && /INSERT INTO greencall_private\.snapshots\b/.test(text)) {
+      interleaved = true;
+      winner = await repository.publishSnapshot(newer, { expectedSnapshotId: first.id });
+    }
+    return result;
+  } });
+  await assert.rejects(slowRepository.publishSnapshot(slow), { code: 'SNAPSHOT_CONFLICT' });
+  assert.equal((await repository.loadSnapshot()).id, winner.id);
+  assert.equal(adapter.count, 3, 'conflicting publication remains inert history');
 });
 
 test('interrupted chunk staging resumes idempotently without exposing incomplete data', async () => {
@@ -223,6 +282,35 @@ test('175000-row synthetic snapshot benchmark', { skip: process.env.GREENCALL_BE
   const sizes = adapter.calls.filter(call => /INSERT INTO greencall_private\.snapshot_chunks/.test(call.text)).map(({ params }) => Buffer.byteLength(params[3]));
   assert.ok(sizes.every(size => size <= 1024 * 1024));
   context.diagnostic(JSON.stringify({ synthetic: true, rows: 175000, chunks: sizes.length, max_chunk_bytes: Math.max(...sizes), publish_ms: Math.round(published - started), load_ms: Math.round(finished - published), heap_mib: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) }));
+});
+
+test('the 128 MiB limit includes the entire private JSON envelope', { skip: process.env.GREENCALL_BENCHMARK_SNAPSHOTS !== '1' }, async () => {
+  const maximum = 128 * 1024 * 1024;
+  const row = { order: 'O', sku: 'S', date: '2026-01-01', description: 'x'.repeat(1000) };
+  const catalog = [{ sku: 'S', cost: 1, unit: 'PZA' }];
+  const catalogBytes = Buffer.byteLength(JSON.stringify(catalog[0])) + 1;
+  const rowBytes = Buffer.byteLength(JSON.stringify(row)) + 1;
+  const count = Math.floor((maximum - catalogBytes) / rowBytes);
+  const rows = Array.from({ length: count }, () => row);
+  const remainder = maximum - catalogBytes - count * rowBytes;
+  const minimumRowBytes = Buffer.byteLength(JSON.stringify({ ...row, description: '' })) + 1;
+  if (remainder >= minimumRowBytes) rows.push({ ...row, description: 'y'.repeat(remainder - minimumRowBytes) });
+  const data = fixture();
+  data.tables = { google_consumos: rows, sku_catalog: catalog };
+  data.sources.google_consumos.original_data_rows = rows.length;
+  data.sources.sku_catalog.original_data_rows = 1;
+  assert.throws(() => sanitizeSnapshot(data), { code: 'INVALID_SNAPSHOT' });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'greencall-snapshot-envelope-'));
+  try {
+    const file = path.join(dir, 'snapshot.json');
+    await assert.rejects(writePrivateSnapshot(file, data), { code: 'INVALID_SNAPSHOT' });
+    await assert.rejects(fs.access(file), { code: 'ENOENT' });
+    rows.splice(-2);
+    data.sources.google_consumos.original_data_rows = rows.length;
+    await writePrivateSnapshot(file, data);
+    assert.ok((await fs.stat(file)).size <= maximum);
+    assert.equal((await readPrivateSnapshot(file)).tables.google_consumos.length, rows.length);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
 test('repository validates before SQL and status selects metadata without private rows', async () => {
@@ -294,6 +382,41 @@ test('PostgreSQL 17 migration, staging, activation and append-only protection', 
     const second = await repository.publishSnapshot(corrected);
     assert.notEqual(second.id, first.id);
     assert.equal((await repository.loadSnapshot()).data.tables.google_consumos[0].quantity, 14);
+    const left = fixture(); left.tables.google_consumos[0].quantity = 3;
+    const right = fixture(); right.tables.google_consumos[0].quantity = 4;
+    const competing = await Promise.allSettled([
+      repository.publishSnapshot(left, { expectedSnapshotId: second.id }),
+      repository.publishSnapshot(right, { expectedSnapshotId: second.id }),
+    ]);
+    assert.equal(competing.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(competing.filter(result => result.status === 'rejected' && result.reason.code === 'SNAPSHOT_CONFLICT').length, 1);
+    const winner = competing.find(result => result.status === 'fulfilled').value;
+    assert.equal((await repository.loadSnapshot()).id, winner.id);
+    const winnerData = competing[0].status === 'fulfilled' ? left : right;
+    assert.equal((await repository.publishSnapshot(winnerData, { expectedSnapshotId: second.id })).id, winner.id);
+    const corruptData = fixture(); corruptData.tables.google_consumos[0].quantity = 6;
+    const corruptWriter = createSnapshotRepository({ ...adapter, query: (text, values) => {
+      if (/INSERT INTO greencall_private\.snapshot_chunks/.test(text) && values[1] === 'google_consumos') {
+        const rows = JSON.parse(values[3]); rows[0].quantity = 9;
+        const corruptValues = [...values]; corruptValues[3] = JSON.stringify(rows);
+        assert.equal(Buffer.byteLength(corruptValues[3]), values[6]);
+        return adapter.query(text, corruptValues);
+      }
+      return adapter.query(text, values);
+    } });
+    await assert.rejects(corruptWriter.publishSnapshot(corruptData, { expectedSnapshotId: winner.id }), { code: 'INVALID_SNAPSHOT' });
+    await assert.rejects(repository.publishSnapshot(corruptData, { expectedSnapshotId: winner.id }), { code: 'INVALID_SNAPSHOT' });
+    assert.equal((await repository.loadSnapshot()).id, winner.id);
+    // Empty-pointer races exercise INSERT's unique-conflict path, not just UPDATE.
+    await adapter.query('DELETE FROM greencall_private.active_snapshot', []);
+    assert.equal(await repository.getActiveSnapshotId(), null);
+    const initial = await Promise.allSettled([
+      repository.publishSnapshot(left, { expectedSnapshotId: null }),
+      repository.publishSnapshot(right, { expectedSnapshotId: null }),
+    ]);
+    assert.equal(initial.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(initial.filter(result => result.status === 'rejected' && result.reason.code === 'SNAPSHOT_CONFLICT').length, 1);
+    assert.equal(await repository.getActiveSnapshotId(), initial.find(result => result.status === 'fulfilled').value.id);
     await assert.rejects(adapter.query('UPDATE greencall_private.snapshots SET captured_at = now()', []), /append-only/);
     await assert.rejects(adapter.query('DELETE FROM greencall_private.snapshot_chunks', []), /append-only/);
     const grants = await adapter.query("SELECT count(*)::integer AS count FROM information_schema.role_table_grants WHERE table_schema = 'greencall_private' AND grantee = 'PUBLIC'", []);
@@ -304,6 +427,9 @@ test('PostgreSQL 17 migration, staging, activation and append-only protection', 
 test('default store with no credentials performs no database access', async () => {
   assert.equal(await loadSnapshot({ env: {} }), null);
   assert.deepEqual(await getSnapshotStatus({ env: {} }), { state: 'not_configured' });
+  const { getActiveSnapshotId } = await import('../lib/snapshot-store.mjs');
+  assert.equal(typeof getActiveSnapshotId, 'function');
+  assert.equal(await getActiveSnapshotId({ env: {} }), null);
 });
 
 test('private files reject repository paths and symlink escapes; writes are mode 0600', async () => {
@@ -395,7 +521,8 @@ test('sync CLI requires explicit write authorization and a development target', 
     let writes = 0;
     const summary = await runSyncCloud({ argv: ['--from-file', source, '--apply'], env: {
       GREENCALL_ALLOW_SNAPSHOT_WRITE: '1', GREENCALL_SNAPSHOT_ENV: 'development', DATABASE_URL: 'postgres://synthetic-development.invalid/test',
-    }, publish: async data => { assert.equal(data.tables.google_consumos.length, 4); writes++; return { id: 'TEST-ID' }; } });
+    }, getActiveSnapshotId: async () => null,
+    publish: async (data, options) => { assert.equal(data.tables.google_consumos.length, 4); assert.equal(options.expectedSnapshotId, null); writes++; return { id: 'TEST-ID' }; } });
     assert.equal(summary.mode, 'published');
     assert.equal(summary.id, 'TEST-ID');
     assert.equal(writes, 1);

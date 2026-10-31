@@ -55,6 +55,25 @@
 
 Último SHA previo al checkpoint: `bc8429c`. El SHA de este checkpoint se registra en la siguiente actualización; su contenido se identifica por el commit `chore: recover and checkpoint GreenCall cloud v2 work`.
 
+## Hito siguiente — revisión, integridad y exportaciones (31/10/2026)
+
+- Recuperación confirmada y publicada en `de8f6431a5870e34577640c35789ba3eaf6acd99`; PR #1, borrador hacia `develop-cloud`: https://github.com/greencallCR-cloud/GreenCall_SupplyChain_Dashboard/pull/1.
+- Preview de ese SHA observado en comentario de Vercel: `https://greencall-supplychain-da-git-8b820b-greencallcr-clouds-projects.vercel.app`. Estado Ready confirmado por GitHub; `/api/status`, `/api/dashboard` y `/api/rows` responden 302 a Vercel SSO sin credenciales de visitante. No se afirma ejecución autenticada remota.
+- Revisión independiente `snapshot_review_v2`: corregidos activación de fragmentos previamente incorrectos, carreras entre publicaciones y límite de archivo que omitía envoltorio JSON. Preactivación verifica contenido real; CAS exige el puntero esperado capturado antes de extraer; los históricos siguen inmutables.
+- Worker: bloqueo exclusivo de staging, liberación en error, sin robo automático de bloqueos antiguos; staging nuevo parte del snapshot activo privado para conservar físicos. Test de concurrencia determinista y de conservación del historial físico.
+- Nuevo `/api/exports`: sesión antes de lectura, filtros y búsqueda, sanitización CSV, BOM, límites de 100.000 filas y 4 MiB. Inventario exporta la misma vista calculada que la pantalla; la consulta cruda usa sus cortes. Un error de descarga conserva la pantalla.
+- Salud Cloud distingue `snapshot_at` de `last_sync_at`: la fecha de captura nunca se presenta como conexión o lectura Google actual certificada.
+- Revisión UI `ui_recovery_qa`: corrigieron contraste, fuga de foco del modal y skip link que cambiaba de módulo. Hay runner reproducible `tools/ui-regression.mjs`; la ejecución completa todavía debe cerrarse antes de certificar este hito visual.
+- Verificación repetida: PostgreSQL 17 aislado, frontera 128 MiB y benchmark sintético 175.000 filas: **23/23**, sin omisiones ni base remota. `npm run validate` vuelve a dar 10 aprobadas/15 fallidas por respaldo privado ausente; no se modifica ese criterio. La última suite general ejecutada antes del último ajuste de exportación dio 65 aprobadas y 3 optativas omitidas; repetir al cerrar el commit.
+- Siguiente tarea iniciada de forma independiente: validar horizontes 3/6/12 mediante selección anidada en cada origen, conservando API actual. No está incluida como completada aquí. No confundir evaluación a un paso con precisión multimes.
+- Próxima acción: cerrar `npm run ui:test`, `npm run check` y `npm test`; revisar diff, commitear/pushear el hito; después integrar diagnósticos multihorizonte y actualizar esta evidencia con SHA exacto.
+
+### Recuperación tras el siguiente límite — 31/10/2026
+- Se volvieron a comprobar árbol, índice, diff, historial y ramas: no se perdieron los archivos del hito. Remoto confirmado en `de8f643` antes del nuevo commit.
+- Repetición inicial: 72 tests Node aprobados/3 optativas omitidas; la regresión de Sheets falló por uso inconsistente de reloj inyectado y reloj del sistema al cumplirse 24 horas reales. Se corrigió la decisión temporal de reconciliación y planificación para usar el reloj del sincronizador; Sheets vuelve a 13/13.
+- `forecast_horizons` dejó implementados y probados seis nuevos contratos de evaluación anidada a 3/6/12 meses y amplió la referencia Statsmodels/Polars. Sus archivos se conservan, pero se confirmarán en un commit separado tras revisión y exposición en la UI.
+- El runner visual aún necesita cerrar su recorrido de descargas; los 225 recorridos y auditorías iniciales no se confunden con ese cierre pendiente. No certificar el hito visual completo hasta leer su reporte exitoso.
+
 ## Recuperación después de límite/cuota o nueva conversación
 1. Reabrir este repositorio/entorno Codex publicado.
 2. Leer `AGENTS.md` y este checkpoint, mirar SHA real y git status/diff.

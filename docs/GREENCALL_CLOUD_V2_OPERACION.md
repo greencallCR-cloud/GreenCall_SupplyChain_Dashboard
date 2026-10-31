@@ -39,12 +39,21 @@ Sin `--apply` valida y no publica en Neon. Publicar exige además `GREENCALL_ALL
 
 El conector Google de esta conversación y el proceso de la aplicación tienen credenciales distintas. La lectura conectada verifica el origen, pero no autoriza al backend desplegado. Un snapshot no certifica conexión actual a Google; se informa como precargado y conserva su fecha de captura.
 
+La carpeta de staging tiene un bloqueo exclusivo durante extracción, guardado y publicación. Otro worker debe esperar a una ejecución posterior. Si queda `.sync.lock` tras una interrupción, verificar que no exista un worker activo y archivar el bloqueo mediante recuperación administrativa; no se roba un bloqueo automáticamente por antigüedad o PID. Al publicar desde Sheets se recupera el snapshot activo privado, incluidos sus conteos físicos, y la activación exige que el puntero no haya cambiado desde antes de la extracción. Ante `SNAPSHOT_CONFLICT`, repetir la lectura completa desde el estado activo; no forzar un overwrite.
+
+## Exportaciones privadas
+
+`GET /api/exports` exige la misma sesión que el dashboard. Soporta ABC, planning, forecast, conteos/intervalos y tablas de origen permitidas. Conserva filtros globales y búsqueda del explorador, sanea fórmulas de CSV y devuelve un archivo con BOM. Las cantidades y costos desconocidos conservan su ausencia. El exportador de consumos usa la fuente Google principal, sin sumar el histórico alternativo Claro.
+
+Se rechazan antes de enviar un archivo parcial las descargas de más de 100.000 filas o 4 MiB. Aplicar filtros o reducir el período. La interfaz informa el error sin salir del dashboard. Los archivos descargados contienen información operativa privada: conservarlos sólo en el entorno autorizado. Los tests de esta implementación usan exclusivamente fixtures sintéticos.
+
 ## Validación reproducible
 
 ```sh
 npm ci --ignore-scripts
 npm run check
 npm test
+npm run ui:test
 npm run cloud:dev
 ```
 
@@ -54,4 +63,4 @@ npm run cloud:dev
 
 ## Pendientes de producción
 
-Identidad por usuario y roles; limitación persistente de intentos; lectura/sincronización real desde el runtime autorizado; comparación completa de datos privados y cortes; medición operativa de rendimiento; importación física persistente en Cloud y exportaciones Cloud; pruebas de recuperación en la rama remota. La importación física local y los importadores legacy se conservan.
+Identidad por usuario y roles; limitación persistente de intentos; lectura/sincronización real desde el runtime autorizado; comparación completa de datos privados y cortes; medición operativa de rendimiento; importación física persistente en Cloud; pruebas de recuperación en la rama remota. La importación física local y los importadores legacy se conservan.

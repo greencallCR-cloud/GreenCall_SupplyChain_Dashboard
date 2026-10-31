@@ -11,10 +11,11 @@
     "validate": "node tools/qa.mjs && node tools/qa_extended.mjs && node tools/qa_sheets_sync.mjs && node tools/qa_hardening.mjs",
     "perf": "node tools/qa_performance.mjs",
     "http-qa": "node tools/qa_http_v141.mjs",
-    "cloud:test": "node --test tools/cloud-stage1.test.mjs tools/cloud-auth.test.mjs tools/cloud-api.test.mjs tools/snapshot-store.test.mjs",
+    "cloud:test": "node --test tools/cloud-stage1.test.mjs tools/cloud-auth.test.mjs tools/cloud-api.test.mjs tools/cloud-http.test.mjs tools/cloud-export.test.mjs tools/snapshot-store.test.mjs",
     "test": "node --test tools/*.test.mjs && node tools/qa_sheets_sync.mjs && node tools/qa_hardening.mjs",
     "cloud:dev": "node tools/cloud-dev.mjs",
-    "cloud:sync": "node tools/sync-cloud.mjs"
+    "cloud:sync": "node tools/sync-cloud.mjs",
+    "ui:test": "node tools/ui-regression.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0"
