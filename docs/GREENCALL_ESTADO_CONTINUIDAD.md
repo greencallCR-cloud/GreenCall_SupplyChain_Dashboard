@@ -164,6 +164,20 @@ No verificado: sesión autenticada en Production (las claves de Vercel difieren 
 Pendiente Planning: 21 SKU "Sin calcular" por ausencia en Inventario Real (no se asume stock cero).
 Próxima acción: completar la verificación en Production con un acceso válido; Planning con costos reconciliados; rendimiento (el snapshot tarda ~16 s en cargarse por petición: cachear por id de snapshot en la función).
 
+## Hito 2026-11-02 (mañana) — Rendimiento, clasificación de equipos, cobertura de costos y estados de Planning
+Rama `claude/perf-forecast-costs` desde `main` `82630fb`. Mediciones con Neon real (rol lector) y snapshot activo.
+
+| Prioridad | Causa demostrada | Cambio | Resultado medido |
+|---|---|---|---|
+| P1 Rendimiento | 107 consultas de chunks secuenciales (6,9 s) + re-hash completo en lectura (3,4 s) + analyze (4,7 s) en cada instancia fría | Lectura paralela acotada (8) con verificación por chunk; re-hash completo sólo al publicar; vistas derivadas persistidas en `greencall_private.snapshot_views` (clave snapshot + engine = commit de Vercel + filtro, hash canónico verificado en lectura); dedupe de peticiones simultáneas | Carga 14,0 → 5,5 s; RSS 624 → ~310 MB; instancia fría con vista 0,54 s / 127 MB (antes ~16,5 s); 4 concurrentes ~80 ms |
+| P2 Equipos serializados | Clasificación sólo por ≥80 % de filas con serie | Precedencia: Series SAP o catálogo TE02 → serializado; TE04 nunca; 80 % sólo como respaldo etiquetado (`serialized_basis`) | 13 serializados = 7 Series SAP + 5 TE02 + 1 evidencia; datos bimodales (≥82 % o 0 %) |
+| P3 Costos | 5 materiales sin valor en ninguna fuente; 3 descripciones de despacho sin SKU con errata | Búsqueda exhaustiva (todas las pestañas, SKU/descr./alias); Cantidades SAP sin columna de valor; `DESCRIPTION_ALIASES` revisados; panel de cobertura en Salud de fuentes | Cobertura 81 → 87 % (41/47). Siguen sin precio: 4011388 (fila Q000 con valor vacío), UTP exterior, clivers, cinta etiquetadora, toallas. Corrección trazable: añadir filas de precio en Catálogo SKUs |
+| P4 Planning | 21 "Sin calcular" mezclaban situaciones distintas | Estados: CALCULADO, SIN_DEMANDA, SIN_STOCK_ACREDITADO (no se asume cero), SIN_STOCK_NI_DEMANDA, INSUMO_NO_INVENTARIADO, PRONOSTICO_NO_CALCULABLE + recomendación y UM | Reales: 22 calculados, 4 sin demanda, 10 sin stock ni demanda, 1 stock no acreditado (HERRAJE DSG12, 307/mes), 5 insumos sin inventario SAP, 1 pronóstico no calculable |
+
+Neon: migración aditiva `20261103_001_snapshot_views.sql` aplicada (dry-run previo); `gc_dashboard_read` SELECT+INSERT sólo en esa tabla. Filas QA de medición eliminadas.
+Pruebas: `npm test` 145/0; PostgreSQL local para snapshot-store/physical-service/snapshot-views.
+Pendiente P5: validación autenticada de Production requiere una clave de QA de solo lectura configurada por el titular como secreto (Vercel + GitHub Actions), sin copiarla al chat.
+
 ## Recuperación después de límite/cuota o nueva conversación
 1. Reabrir este repositorio/entorno Codex publicado.
 2. Leer `AGENTS.md` y este checkpoint, mirar SHA real y git status/diff.

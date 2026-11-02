@@ -1,0 +1,31 @@
+name: GreenCall production smoke (authenticated)
+
+# Logs in with a READ-ONLY access key stored as a repository secret and checks every tab
+# (charts drawn, tables, JS errors, overflow) on desktop and mobile. Prints counts only.
+# Secret: GREENCALL_SMOKE_ACCESS_KEY = the value of Vercel's GREENCALL_ACCESS_KEY (viewer, never the admin key).
+on:
+  deployment_status:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright (pinned) and Chromium
+        run: |
+          npm i --no-save --no-audit --no-fund playwright@1.48.2
+          npx playwright install --with-deps chromium
+      - name: Authenticated smoke test
+        env:
+          GREENCALL_SMOKE_URL: https://greencall-supplychain-dashboard.vercel.app
+          GREENCALL_SMOKE_ACCESS_KEY: ${{ secrets.GREENCALL_SMOKE_ACCESS_KEY }}
+        run: node tools/prod-smoke.mjs

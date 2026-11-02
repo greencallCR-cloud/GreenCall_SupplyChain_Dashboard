@@ -24,7 +24,9 @@ neonConfig.webSocketConstructor ??= globalThis.WebSocket;
 export const ROLES = {
   gc_dashboard_read: { env: 'DATABASE_URL', grants: [
     'GRANT USAGE ON SCHEMA greencall_private TO gc_dashboard_read',
-    'GRANT SELECT ON greencall_private.snapshots, greencall_private.snapshot_chunks, greencall_private.active_snapshot, greencall_private.physical_import_batches TO gc_dashboard_read'] },
+    'GRANT SELECT ON greencall_private.snapshots, greencall_private.snapshot_chunks, greencall_private.active_snapshot, greencall_private.physical_import_batches TO gc_dashboard_read',
+    // Derived dashboard cache only: SELECT + INSERT, never UPDATE/DELETE.
+    'GRANT SELECT, INSERT ON greencall_private.snapshot_views TO gc_dashboard_read'] },
   gc_physical_write: { env: 'GREENCALL_PHYSICAL_DATABASE_URL', grants: [
     'GRANT USAGE ON SCHEMA greencall_private TO gc_physical_write',
     'GRANT SELECT ON greencall_private.snapshots, greencall_private.snapshot_chunks, greencall_private.active_snapshot, greencall_private.physical_import_batches TO gc_physical_write',
@@ -117,7 +119,7 @@ async function verifyRoles(envFile) {
     try {
       const who = (await client.query('select current_user u')).rows[0].u;
       const can = async (table, priv) => (await client.query('select has_table_privilege($1, $2) ok', ['greencall_private.' + table, priv])).rows[0].ok;
-      const result = { role: who, select_snapshots: await can('snapshots', 'SELECT'), insert_snapshots: await can('snapshots', 'INSERT'), insert_ledger: await can('physical_import_batches', 'INSERT'), update_active: await can('active_snapshot', 'UPDATE'), delete_snapshots: await can('snapshots', 'DELETE') };
+      const result = { role: who, insert_views: await can('snapshot_views', 'INSERT'), update_views: await can('snapshot_views', 'UPDATE'), select_snapshots: await can('snapshots', 'SELECT'), insert_snapshots: await can('snapshots', 'INSERT'), insert_ledger: await can('physical_import_batches', 'INSERT'), update_active: await can('active_snapshot', 'UPDATE'), delete_snapshots: await can('snapshots', 'DELETE') };
       let publicTable = false; try { await client.query('select 1 from public.playing_with_neon limit 1'); publicTable = true; } catch {}
       log('verify', JSON.stringify({ ...result, reads_public_tables: publicTable }));
     } finally { await client.end(); }

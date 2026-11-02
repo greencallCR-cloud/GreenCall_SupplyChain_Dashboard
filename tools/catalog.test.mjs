@@ -103,3 +103,37 @@ test('abbreviated operational labels still get their business unit', () => {
   assert.equal(r.unit('PEND-CINTA-ETIQ').unit, 'PZA');
   assert.equal(r.unit('PEND-CINTA-ETIQ', 'CINTA PARA ETIQUETADORA').unit, 'PZA');
 });
+
+test('dashboard exposes a cost-coverage audit for every active material (no zero fallbacks)', async () => {
+  const { analyze } = await import('../src/core.mjs');
+  const d = analyze({ tables: {
+    google_consumos: [{ order: 'O1', sku: '9000001', quantity: 1, date: '2026-09-01', tech: 'T', source_mode: 'GOOGLE_CONSUMOS', _sheet_row: 2 }],
+    sku_catalog: catalog,
+    dispatch_nonserial: [{ date: '2026-09-01', tech: 'T', sku: 'PEND-CLIVER', description: 'CLIVERS', quantity: 1 }, { date: '2026-09-01', tech: 'T', sku: 'PEND-TENSORES', description: 'TENSORES', quantity: 1 }],
+  }, sources: {} }, {}, {});
+  const cov = d.quality.cost_coverage;
+  assert.ok(cov.total >= 3);
+  const cliver = cov.items.find(i => /CLIVER/.test(i.description || i.sku));
+  assert.equal(cliver.cost, null); assert.equal(cliver.basis, 'SIN_COSTO'); assert.ok(cliver.reason);
+  assert.equal(cov.items.find(i => /TENSOR/.test(i.description || i.sku)).cost, 7);
+  assert.ok(cov.items.every(i => i.cost === null || i.cost > 0), 'never a zero placeholder');
+});
+
+test('reviewed description aliases resolve known misspellings/truncations to one catalog SKU', async () => {
+  const { DESCRIPTION_ALIASES } = await import('../src/catalog.mjs');
+  const cat = [
+    { sku: '1013950', description: 'AMARRA PLASTICAS NEGRAS 8" - CPX', unit: 'PZA', cost: 9, center: 'C1', warehouse: 'A000', lot: 'VALORADO' },
+    { sku: '1005388', description: 'CONECTOR SIN HERRAMI 8802-T/1.6-3 SC/APC', unit: 'PZA', cost: 8, center: 'C1', warehouse: 'A000', lot: 'VALORADO' },
+    { sku: '1027925', description: 'CABLE UTP CAT5 P/INTERIORES 66445532AM', unit: 'M', cost: 2, center: 'C1', warehouse: 'A000', lot: 'VALORADO' },
+  ];
+  const r = createCatalogResolver(cat);
+  assert.equal(r.cost('', 'ARRA PLASTICAS NEGRAS 8" - CPX').cost, 9);
+  assert.equal(r.cost(null, 'CONECTOR SIN HERRI 8802-T/1.6-3 SC/APC').basis, 'ALIAS');
+  assert.equal(r.unit('', 'CABLE UTP CAT5 P/INTERIORES 66445532').unit, 'M');
+  // Every alias targets a distinct SKU (no collisions) and an alias never overrides a real SKU.
+  const targets = Object.values(DESCRIPTION_ALIASES);
+  assert.equal(new Set(targets).size, targets.length);
+  assert.equal(r.cost('1013950', 'ARRA PLASTICAS NEGRAS 8" - CPX').basis, 'ÚNICO');
+  // Target absent from the catalog → no match, no guess.
+  assert.equal(createCatalogResolver([]).cost('', 'ARRA PLASTICAS NEGRAS 8" - CPX').cost, null);
+});

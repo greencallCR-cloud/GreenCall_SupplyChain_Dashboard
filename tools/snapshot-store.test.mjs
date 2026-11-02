@@ -524,3 +524,28 @@ test('production sync needs a second explicit flag and the least-privilege sync 
     assert.match(target, /gc_sheets_sync/, 'publication uses the sync role, never the read role');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
+
+test('loading fetches chunks concurrently (bounded) and still rejects a tampered chunk', async () => {
+  const adapter = memoryAdapter();
+  const repository = createSnapshotRepository(adapter);
+  const big = fixture();
+  // Enough synthetic rows for several chunks.
+  big.tables.google_consumos = Array.from({ length: 6000 }, (_, i) => ({ order: 'TEST-' + i, sku: 'TEST-M', quantity: 1, date: '2026-09-01', tech: 'TEST-T1', source_mode: 'GOOGLE_CONSUMOS', _sheet_row: i + 2 }));
+  big.sources.google_consumos.original_data_rows = 6000;
+  await repository.publishSnapshot(big, { capturedAt: retrieved });
+  let inFlight = 0, peak = 0;
+  const slow = createSnapshotRepository({ ...adapter, query: async (text, values) => {
+    if (!/FROM greencall_private\.snapshot_chunks/.test(text)) return adapter.query(text, values);
+    inFlight++; peak = Math.max(peak, inFlight);
+    await new Promise(r => setTimeout(r, 20));
+    try { return await adapter.query(text, values); } finally { inFlight--; }
+  } });
+  assert.equal((await slow.loadSnapshot()).data.tables.google_consumos.length, 6000);
+  assert.ok(peak > 1 && peak <= 8, 'chunk reads overlap, bounded at 8 (peak ' + peak + ')');
+  const tampering = createSnapshotRepository({ ...adapter, query: async (text, values) => {
+    const result = await adapter.query(text, values);
+    if (/FROM greencall_private\.snapshot_chunks/.test(text) && values[2] === 1) return result.map(r => ({ ...r, rows: r.rows.map((x, i) => i === 0 ? { ...x, quantity: 2 } : x) }));
+    return result;
+  } });
+  await assert.rejects(tampering.loadSnapshot(), { code: 'INVALID_SNAPSHOT' });
+});
