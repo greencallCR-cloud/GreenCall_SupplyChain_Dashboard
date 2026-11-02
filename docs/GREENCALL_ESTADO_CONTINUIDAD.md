@@ -160,6 +160,8 @@ Pruebas: `npm test` 126 aprobadas / 0 fallos (4 omitidas: PostgreSQL/benchmark o
 Skills usadas con efecto: superpowers:test-driven-development (rojo→verde por hallazgo), anthropic-skills:agent-browser (reproducción y auditoría de gráficos/paginación con datos reales), statsmodels (validación independiente), ecc:security-reviewer (hito previo).
 No verificado: sesión autenticada en Production (las claves de Vercel difieren de las generadas en esta sesión); precios de materiales sin fila en el catálogo; Quiebre de política/Planning sin cambios funcionales en este hito.
 **Publicado en Production (02/11/2026 ~06:15 UTC):** PR #3 (`854874c`, gráficos) y PR #4 (`55afd98`: costos/UDM/despachos/forecast/tablas/caché/política), ambos con CI verde (Node 22/24, PostgreSQL, estadística) y Vercel success. Verificación pública: `/`, assets y Plotly 3.3.1 200; `/api/status` JSON; `/api/dashboard` 401 anónimo; 390 px sin overflow ni errores. Punto de rollback: `ac4461c` (antes de #3) o Instant Rollback de Vercel.
+**PR #5 en Production (`d92dc19`, ~06:15 UTC):** demanda de equipos serializados = series distintas (filas sin serie con cantidades a granel excluidas y contadas). BUNDLE 12.791→1.342/mes; STB 4017404 4.682→80/mes (Crítico con stock 8); ONT F6600P 8.066→401. CI verde; `/api/status` 200 estable 6 comprobaciones. Rollback: `30b4780`.
+Pendiente Planning: 21 SKU "Sin calcular" por ausencia en Inventario Real (no se asume stock cero).
 Próxima acción: completar la verificación en Production con un acceso válido; Planning con costos reconciliados; rendimiento (el snapshot tarda ~16 s en cargarse por petición: cachear por id de snapshot en la función).
 
 ## Recuperación después de límite/cuota o nueva conversación
