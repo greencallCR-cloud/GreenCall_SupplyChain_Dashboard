@@ -155,7 +155,7 @@ export class SheetsSync {
     if(!this.config.enabled)throw Error('Primero habilite la conexión a Google Sheets.');
     if(this.busy)throw Error('Ya hay una sincronización ejecutándose.');
     this.busy=true;this.lastAttempt=this.clock().toISOString();this.config.last_attempt_at=this.lastAttempt;this.lastError=null;
-    let full=forceFull||!this.config.last_full_at||(Date.now()-Date.parse(this.config.last_full_at)>this.config.full_every_hours*3600_000);
+    let full=forceFull||!this.config.last_full_at||(Date.parse(this.lastAttempt)-Date.parse(this.config.last_full_at)>this.config.full_every_hours*3600_000);
     const staged={},logs={},nextCursors={...this.config.cursors};
     try{
       const meta=await this.metadata();const known=new Map((meta.sheets||[]).map(s=>[s.properties.title,s.properties.gridProperties?.rowCount||0]));
@@ -206,7 +206,7 @@ export class SheetsSync {
   }
   schedule(){if(this.timer)clearInterval(this.timer);this.timer=setInterval(()=>{
     if(!this.config.enabled||this.busy)return;const last=Math.max(this.config.last_sync_at?Date.parse(this.config.last_sync_at):0,this.lastAttempt?Date.parse(this.lastAttempt):0);
-    if(Date.now()-last<this.config.interval_minutes*60000)return;
+    if(this.clock().getTime()-last<this.config.interval_minutes*60000)return;
     this.sync().catch(e=>{this.lastError=String(e?.message||e)});
   },60000);this.timer.unref?.()}
 }

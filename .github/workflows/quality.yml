@@ -1,0 +1,85 @@
+name: GreenCall quality
+
+on:
+  push:
+    branches: [develop-cloud, 'codex/**']
+  pull_request:
+    branches: [develop-cloud]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Node ${{ matrix.node }} contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
+
+  postgres:
+    name: Private snapshot integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Start disposable PostgreSQL without network or published ports
+        run: |
+          docker run --detach --rm --network none --name greencall-ci-pg \
+            -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec greencall-ci-pg pg_isready -U postgres; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Migration, corruption, concurrency and synthetic size boundaries
+        env:
+          GREENCALL_TEST_POSTGRES_CONTAINER: greencall-ci-pg
+          GREENCALL_BENCHMARK_SNAPSHOTS: '1'
+        run: node --test tools/snapshot-store.test.mjs
+      - name: Remove only the disposable test container
+        if: always()
+        run: docker stop greencall-ci-pg || true
+
+  statistics:
+    name: Independent synthetic statistical reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'statsmodels==0.15.0' 'polars==1.44.2'
+      - run: node tools/forecast_reference_input.mjs
+      - run: python tools/qa_forecast_reference.py
