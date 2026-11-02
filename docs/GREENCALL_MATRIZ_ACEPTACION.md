@@ -3,7 +3,7 @@ La palabra «VERIFICADO» requiere evidencia de código + prueba + fuente/corte;
 
 | ID | Requisito | Prueba mínima y evidencia esperada | Estado inicial |
 |---|---|---|---|
-| SEC01 | API autenticada y datos internos restringidos | petición anónima no entrega stock/costos/series; log sin secretos | VERIFICADO EN TEST: auth/API/HTTP, cookie/origen/expiración. Preview con SSO; falta prueba autenticada externa |
+| SEC01 | API autenticada y datos internos restringidos | petición anónima no entrega stock/costos/series; log sin secretos | VERIFICADO EN TEST: auth/API/HTTP, cookie/origen/expiración. Preview con SSO; falta prueba autenticada externa; rol admin separado (GREENCALL_ADMIN_KEY) para escrituras físicas, verificado en test |
 | SEC02 | Históricos fuera de GitHub/webroot | inspección repo, Vercel deployment y Git history | PARCIAL: gitignore en develop-cloud |
 | DATA01 | Consumos completos | conteo de origen por corte, hash y conciliación sin pérdidas | NO VERIFICADO CLOUD |
 | DATA02 | Órdenes únicas | 8 líneas misma orden = 1 orden; fecha válida | CONTRATO VERIFICADO: snapshot-store/domain-integrity; contraste conectado de columnas mínimas, sin snapshot privado integral |
@@ -13,7 +13,7 @@ La palabra «VERIFICADO» requiere evidencia de código + prueba + fuente/corte;
 | DISP01 | Despachos integrados | 12 series una acta = 1 evento, ambas pestañas unidas | NO VERIFICADO CLOUD |
 | INV01 | Inventario real por ubicación | bodega+todos técnicos; filtros, corte y conciliación | NO VERIFICADO CLOUD |
 | INV02 | SAP/ETA | excluir no SAP/consumida/devuelta/cobrada; último despacho; ETA no físico | NO VERIFICADO CLOUD |
-| PHYS01 | Excel físico | preview, dos tomas por técnico/SKU, ajustes, idempotencia y rollback | NO VERIFICADO CLOUD |
+| PHYS01 | Excel físico | preview, dos tomas por técnico/SKU, ajustes, idempotencia y rollback | VERIFICADO CON FIXTURES + POSTGRESQL DESECHABLE: preview sin escrituras, validación por fila/campo, CAS+bitácora en una transacción, idempotencia, reversión que restaura el valor previo, append-only; E2E navegador desktop/móvil con datos sintéticos. Falta migración/rol escritor en Neon y datos reales |
 | ABC01 | Super ABC | valor y frecuencia, matriz y sin costos falsos | NO VERIFICADO CLOUD |
 | FCAST01 | Órdenes y SKU | cortes mensuales, baseline y modelo por serie | NO VERIFICADO CLOUD |
 | FCAST02 | Selección estadística | rolling-origin sin fuga, WAPE/MAE/sMAPE, intermitentes | VERIFICADO CON FIXTURES: selector h=1 y evaluación externa anidada h=3/6/12; plazos desplazados por meses parciales, 27 tests y referencias Statsmodels/Polars. Falta certificación operativa |

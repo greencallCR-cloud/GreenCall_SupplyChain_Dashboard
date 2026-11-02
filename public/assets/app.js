@@ -212,6 +212,7 @@ function renderAvailability(){
 function cloudAdministration(c){c.innerHTML=heading('Administración del entorno','Acceso y fuentes configurados en el servidor. Las operaciones de origen son de solo lectura.')+`<section class="source-health">${sourceSummary()}<div class="availability-actions" style="margin-top:18px"><button class="btn-primary" id="adminRetry">Comprobar fuentes</button><button class="btn-quiet" id="adminLogout">Cerrar sesión</button></div></section><div class="notice-unit"><b>Contingencia administrativa</b><span>La recuperación de históricos y los importadores legacy requieren el entorno local autorizado. La carga manual habitual es el Excel de toma física.</span></div>`+guideCards();$('adminRetry').onclick=refresh;$('adminLogout').onclick=logout;bindRoutes()}
 function physicalWorkspace(c,d){
   const cloud=V.status?.deployment==='vercel',canImport=!cloud&&V.authenticated;
+  if(cloud)return cloudPhysicalWorkspace(c,d);
   c.innerHTML=`<section class="physical-intro">${icon('physical')}<div><h2>Excel de toma física</h2><p>Registre el conteo por técnico, fecha y SKU. La previsualización permite revisar hojas, filas y duplicados antes de aplicar. El último conteo válido sustituye al anterior para ese técnico y material.</p></div>${canImport?'<button class="btn-primary" id="openPhysicalUpload">Cargar Excel</button>':''}</section><div id="physicalUpload" class="panel physical-upload" ${canImport?'hidden':''}>${!canImport?(cloud?'<h3>Carga de Excel en el entorno local</h3><p>La importación de tomas físicas requiere el entorno local autorizado. Los conteos disponibles y sus intervalos se pueden consultar en esta vista.</p>':'<h3>Autorice la carga del conteo</h3><p>Ingrese con la clave administrativa de esta ejecución para previsualizar y aplicar el Excel.</p><a href="#admin" data-route="admin" class="btn-quiet">Abrir acceso administrativo</a>'):`<h3>Validar un nuevo conteo</h3><p>Use un archivo dedicado a tomas físicas. Se requieren fecha, código de técnico, SKU y conteo físico numérico. Se aceptan cantidades cero; los registros anulados no sustituyen un conteo válido.</p><div class="dropzone" id="physicalDrop"><strong>Seleccione el Excel del conteo</strong><small>Encabezados del origen: Toma, Fecha, Código técnico, SKU y Conteo físico.</small><input id="physicalFiles" name="physical-files" type="file" accept=".xlsx,.xlsm" aria-label="Excel de toma física" multiple></div><div class="availability-actions"><button class="btn-primary" id="analyzePhysical">Previsualizar y validar</button><button class="btn-quiet" id="applyPhysical" disabled>Aplicar conteos validados</button></div><div id="physicalPreview" class="import-log" aria-live="polite"><p>No hay archivos preparados.</p></div>`}</div><div id="physicalAnalysis"></div>`;
   if(d.physical?.latest?.length)physical($('physicalAnalysis'),d);else $('physicalAnalysis').innerHTML=empty('Aún no hay conteos físicos válidos. Cargue un Excel de toma física para crear el primer corte.');bindRoutes();
   if(canImport){$('openPhysicalUpload').onclick=()=>{$('physicalUpload').hidden=!$('physicalUpload').hidden;if(!$('physicalUpload').hidden)$('physicalFiles').focus()};$('analyzePhysical').onclick=previewPhysical;$('applyPhysical').onclick=applyPhysical;const drop=$('physicalDrop');drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag')};drop.ondragleave=()=>drop.classList.remove('drag');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');V.physicalFiles=[...e.dataTransfer.files];toast(V.physicalFiles.length+' archivos seleccionados')}}
@@ -226,5 +227,85 @@ async function previewPhysical(){
   if(!$('physicalPreview'))return;out.innerHTML=reports.join('');$('analyzePhysical').disabled=false;$('applyPhysical').disabled=!V.physicalStaged.length;V.physicalFiles=null;
 }
 async function applyPhysical(){if(!V.physicalStaged?.length)return;if(!confirm('¿Aplicar los conteos previsualizados al almacenamiento local? Se conserva el histórico y no se modifica Google Sheets.'))return;const button=$('applyPhysical');button.disabled=true;try{await api('/api/import/apply',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ids:V.physicalStaged.map(x=>x.id)})});V.physicalStaged=[];toast('Conteos aplicados. Actualizando el último conteo válido…');await refresh();go('physical')}catch(error){toast(error.message);if($('applyPhysical'))button.disabled=false}}
+
+// ---- Cloud: toma física persistente (vista previa -> aplicar -> historial / reversión) ----
+const PHYSICAL_CHANGE={NUEVO:['good','Nuevo'],ACTUALIZA:['warn','Corrige'],SIN_CAMBIO:['','Sin cambio']};
+function cloudPhysicalWorkspace(c,d){
+  const ph=V.status?.physical||{},admin=V.status?.access?.role==='admin',ready=ph.state==='LISTO';
+  const blocked=ph.state==='SIN_CONFIGURAR'?['Administración Cloud sin configurar','El servidor aún no define una clave de administración separada (GREENCALL_ADMIN_KEY). Los conteos existentes se pueden consultar; la carga queda deshabilitada.']
+    :ph.state==='SIN_CREDENCIALES'?['Falta la conexión privada de escritura','El servidor no tiene la credencial de escritura para tomas físicas (GREENCALL_PHYSICAL_DATABASE_URL). No se simula ninguna carga.']
+    :!admin?['Se requiere la clave de administración','Su sesión es de consulta. Para cargar o revertir una toma física, cierre sesión e ingrese con la clave de administración.']:null;
+  c.innerHTML=`<section class="physical-intro">${icon('physical')}<div><h2>Excel de toma física</h2><p>Carga habitual del conteo por técnico, fecha y SKU. Cada archivo se valida fila por fila contra el catálogo y los técnicos del snapshot activo; al aplicarlo se crea un lote auditable que puede revertirse sin borrar historial. Google Sheets no se modifica.</p></div></section>`
+   +`<div class="panel physical-upload" id="physicalUpload">${blocked?`<h3>${esc(blocked[0])}</h3><p>${esc(blocked[1])}</p><span class="chip warn">${esc(ph.state||'NO DISPONIBLE')}</span>`
+   :`<h3>Validar un nuevo conteo</h3><p>Un archivo por lote. Columnas requeridas: Toma, Fecha, Código técnico, SKU y Conteo físico (use 0 si no hay existencias). Máximo 4 MiB.</p><div class="dropzone" id="physicalDrop"><strong>Seleccione el Excel del conteo</strong><small>XLSX o XLSM. Las demás hojas del libro se ignoran y se informan.</small><input id="physicalFiles" name="physical-file" type="file" accept=".xlsx,.xlsm" aria-label="Excel de toma física"></div><div class="availability-actions"><button class="btn-primary" id="analyzePhysical">Previsualizar y validar</button><button class="btn-quiet" id="applyPhysical" disabled>Aplicar lote validado</button></div><div id="physicalPreview" class="import-log physical-preview" aria-live="polite"><p>No hay archivo preparado.</p></div>`}</div>`
+   +`<div class="panel" style="margin-bottom:20px"><div class="table-tools"><h3>Historial de lotes</h3><button class="btn-quiet" id="physicalHistoryReload">Actualizar</button></div><div id="physicalHistory" aria-live="polite"><p class="help-text">Cargando historial…</p></div></div><div id="physicalAnalysis"></div>`;
+  if(d.physical?.latest?.length)physical($('physicalAnalysis'),d);else $('physicalAnalysis').innerHTML=empty('Aún no hay conteos físicos válidos en el snapshot activo.');
+  bindRoutes();$('physicalHistoryReload').onclick=loadPhysicalHistory;loadPhysicalHistory();
+  if(!blocked&&ready){
+    $('analyzePhysical').onclick=cloudPreviewPhysical;$('applyPhysical').onclick=cloudApplyPhysical;
+    const drop=$('physicalDrop');drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag')};drop.ondragleave=()=>drop.classList.remove('drag');
+    drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');V.physicalFiles=[...e.dataTransfer.files].slice(0,1);toast('Archivo seleccionado: '+(V.physicalFiles[0]?.name||''))};
+  }
+}
+function physicalIssuesTable(issues){
+  if(!issues?.length)return '<p class="help-text">Sin observaciones: todas las filas cumplen el contrato.</p>';
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Fila</th><th>Hoja</th><th>Severidad</th><th>Campo</th><th>Detalle</th></tr></thead><tbody>${issues.slice(0,200).map(i=>`<tr><td class="num">${esc(i.row)}</td><td>${esc(i.sheet)}</td><td><span class="chip ${i.severity==='error'?'bad':'warn'}">${i.severity==='error'?'Error':'Aviso'}</span></td><td>${esc(i.field)}</td><td>${esc(i.message)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function physicalChangesTable(changes){
+  if(!changes?.length)return '';
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Fila</th><th>Técnico</th><th>SKU</th><th>Fecha</th><th class="num">Conteo</th><th>Unidad</th><th class="num">Conteo previo</th><th>Fecha previa</th><th>Efecto</th></tr></thead><tbody>${changes.map(x=>{const [cls,label]=PHYSICAL_CHANGE[x.change]||['',x.change];return `<tr><td class="num">${esc(x.row)}</td><td>${esc(x.tech)}${x.tech_name?`<small style="display:block">${esc(x.tech_name)}</small>`:''}</td><td>${esc(x.sku)}${x.description?`<small style="display:block">${esc(x.description)}</small>`:''}</td><td>${esc(x.date)}</td><td class="num">${nfmt(x.count)}</td><td>${esc(x.unit)}</td><td class="num">${nfmt(x.previous_count)}</td><td>${esc(x.previous_date||'—')}</td><td><span class="chip ${cls}">${esc(label)}</span></td></tr>`}).join('')}</tbody></table></div>`;
+}
+function renderPhysicalPreview(p){
+  const s=p.stats||{},blocked=p.blocked_reason==='VALIDATION_FAILED'?'El archivo tiene errores bloqueantes. Corríjalos en el Excel y vuelva a analizarlo.':p.blocked_reason==='NO_CHANGES'?'El archivo no contiene conteos nuevos ni correcciones respecto al snapshot activo.':'';
+  const units=(s.by_unit||[]).map(u=>`<span class="source-chip">${esc(u.unit)}: <b>${nfmt(u.quantity)}</b> en ${nfmt(u.rows)} filas</span>`).join('');
+  return `<div class="stat-row"><div><strong>${esc(p.file?.filename)}</strong><small style="display:block">Hojas de toma: ${esc((p.file?.sheets||[]).join(', '))}${p.file?.ignored_sheets?.length?' · Ignoradas: '+esc(p.file.ignored_sheets.join(', ')):''} · Base: snapshot ${esc(String(p.base_snapshot?.id||'').slice(0,8))}</small></div><span class="chip ${p.can_apply?'good':'bad'}">${p.can_apply?'Listo para aplicar':'Bloqueado'}</span></div>`
+   +`<div class="admin-cards" style="margin:12px 0">${[['Filas leídas',s.rows_read],['Válidas',s.valid],['Errores',s.errors],['Avisos',s.warnings],['Nuevas',s.new],['Correcciones',s.updated],['Sin cambio',s.unchanged],['Técnicos',s.technicians]].map(([k,v])=>`<div class="mini-card">${esc(k)}<b>${nfmt(v)}</b></div>`).join('')}</div>`
+   +`<p class="help-text">Período del conteo: ${esc(s.date_min||'—')} a ${esc(s.date_max||'—')}. Totales por unidad (no se suman entre unidades):</p><div class="chip-group" style="margin:6px 0 14px">${units||'<span class="help-text">—</span>'}</div>`
+   +(blocked?`<p class="warning-inline">${esc(blocked)}</p>`:'')
+   +`<h3 style="margin-top:14px">Observaciones${p.issues_truncated?' (primeras 500)':''}</h3>${physicalIssuesTable(p.issues)}`
+   +(p.changes?.length?`<h3 style="margin-top:14px">Efecto sobre el último conteo válido${p.changes_truncated?' (primeras 200 filas)':''}</h3>${physicalChangesTable(p.changes)}`:'');
+}
+async function cloudPreviewPhysical(){
+  const generation=refreshID,file=(V.physicalFiles?.length?V.physicalFiles:[...$('physicalFiles').files])[0];
+  if(!file)return toast('Seleccione un Excel de toma física.');
+  if(!/\.xls[mx]$/i.test(file.name))return toast('Seleccione un archivo Excel XLSX o XLSM.');
+  if(file.size>4*1024*1024)return toast('El archivo supera 4 MiB; divida la toma por técnico o fecha.');
+  const out=$('physicalPreview');out.innerHTML='<p>Validando filas contra catálogo y técnicos…</p>';$('analyzePhysical').disabled=true;$('applyPhysical').disabled=true;V.physicalCloud=null;
+  try{
+    const buffer=await file.arrayBuffer();
+    const p=await api('/api/physical/preview',{method:'POST',headers:{'x-file-name':encodeURIComponent(file.name),'content-type':'application/octet-stream'},body:buffer});
+    if(generation!==refreshID||!$('physicalPreview'))return;
+    out.innerHTML=renderPhysicalPreview(p);
+    if(p.can_apply)V.physicalCloud={buffer,name:file.name,sha:p.file.sha256,base:p.base_snapshot.id,stats:p.stats};
+    $('applyPhysical').disabled=!p.can_apply;
+  }catch(error){if($('physicalPreview'))out.innerHTML=`<div class="stat-row"><strong>${esc(file.name)}</strong><span class="warning-inline">${esc(error.message)}</span></div>`}
+  finally{if($('analyzePhysical'))$('analyzePhysical').disabled=false;V.physicalFiles=null}
+}
+async function cloudApplyPhysical(){
+  const staged=V.physicalCloud;if(!staged)return;
+  if(!confirm(`¿Aplicar ${nfmt(staged.stats.new)} conteos nuevos y ${nfmt(staged.stats.updated)} correcciones? Se crea un lote auditable y reversible; Google Sheets no se modifica.`))return;
+  const button=$('applyPhysical');button.disabled=true;
+  try{
+    const r=await api('/api/physical/apply',{method:'POST',headers:{'x-file-name':encodeURIComponent(staged.name),'x-file-sha256':staged.sha,'x-base-snapshot':staged.base,'content-type':'application/octet-stream'},body:staged.buffer});
+    V.physicalCloud=null;toast(r.idempotent?'Este lote ya estaba aplicado; no se duplicó.':'Lote aplicado. Actualizando indicadores…');await refresh();go('physical');
+  }catch(error){toast(error.code==='SNAPSHOT_CONFLICT'?'Los datos cambiaron desde la vista previa. Vuelva a analizar el archivo.':error.message);V.physicalCloud=error.code==='SNAPSHOT_CONFLICT'?null:staged;if($('applyPhysical'))button.disabled=!V.physicalCloud}
+}
+async function loadPhysicalHistory(){
+  const box=$('physicalHistory');if(!box)return;
+  try{
+    const h=await api('/api/physical/batches');if(!$('physicalHistory'))return;
+    V.physicalActive=h.active_snapshot?.id||null;const admin=V.status?.access?.role==='admin'&&V.status?.physical?.state==='LISTO';
+    if(!h.batches?.length){box.innerHTML='<p class="help-text">Aún no hay lotes Cloud. Los conteos previos al módulo Cloud se conservan como historial base.</p>';return}
+    box.innerHTML=`<div class="table-wrap"><table class="data-table"><thead><tr><th>Fecha (UTC)</th><th>Acción</th><th>Archivo</th><th class="num">Filas</th><th>Período</th><th>Estado</th><th></th></tr></thead><tbody>${h.batches.map(b=>{const active=b.action==='IMPORT'&&!b.reverted_by;return `<tr><td>${esc(String(b.created_at).slice(0,16).replace('T',' '))}</td><td>${b.action==='IMPORT'?'Importación':'Reversión'}</td><td>${esc(b.filename||'—')}${b.file_sha256?`<small style="display:block">SHA ${esc(b.file_sha256.slice(0,12))}</small>`:''}</td><td class="num">${nfmt(b.action==='IMPORT'?b.row_count:b.stats?.rows_removed)}</td><td>${esc(b.stats?.date_min?b.stats.date_min+' a '+b.stats.date_max:'—')}</td><td><span class="chip ${b.action==='REVERT'?'':active?'good':'warn'}">${b.action==='REVERT'?'Registro':active?'Vigente':'Revertido'}</span></td><td>${admin&&active?`<button class="btn-quiet" data-revert="${esc(b.id)}">Revertir</button>`:''}</td></tr>`}).join('')}</tbody></table></div>`;
+    box.querySelectorAll('[data-revert]').forEach(btn=>btn.onclick=()=>revertPhysical(btn.dataset.revert,btn));
+  }catch(error){if($('physicalHistory'))box.innerHTML=`<p class="warning-inline">${esc(error.code==='SIN_CREDENCIALES'?'Historial no disponible: falta la conexión privada de tomas físicas.':error.message)}</p>`}
+}
+async function revertPhysical(id,button){
+  if(!V.physicalActive)return toast('No hay snapshot activo para revertir.');
+  if(!confirm('¿Revertir este lote? Sus conteos dejan de aplicarse y se restaura el valor anterior. El lote y la reversión quedan registrados.'))return;
+  button.disabled=true;
+  try{await api('/api/physical/revert',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({batch_id:id,base_snapshot_id:V.physicalActive})});toast('Lote revertido. Actualizando indicadores…');await refresh();go('physical')}
+  catch(error){toast(error.code==='SNAPSHOT_CONFLICT'?'Los datos cambiaron; actualice el historial e intente de nuevo.':error.message);button.disabled=false}
+}
 
 document.addEventListener('DOMContentLoaded',()=>{init();setInterval(async()=>{try{const s=await api('/api/status');if(s.deployment==='vercel'&&V.authenticated&&!s.authenticated){++refreshID;++filterRequest;V.data=null;V.authenticated=false;V.status=s;V.phase=s.access?.state==='required'?'access':'empty';syncStatus(s);render();return}if(s.sheets?.last_sync_at&&V.lastSheetAt&&s.sheets.last_sync_at!==V.lastSheetAt){V.lastSheetAt=s.sheets.last_sync_at;await refresh();toast('Indicadores actualizados desde Google Sheets');}}catch{}},60000)});

@@ -15,3 +15,5 @@ main{max-width:1680px;margin:auto;padding:29px 30px 12px}.hero{display:flex;gap:
 .inline-banner{padding:12px 15px;margin-bottom:17px;border:1px solid #e5dcc9;border-radius:6px;background:#fff8e9;font-size:11px;color:#76572a}.btn-quiet{text-decoration:none}.select-group #forecastHorizon{min-width:110px;width:120px}@media(max-width:700px){.select-group #forecastHorizon{width:120px}}
 
 .mobile-nav-close{display:none}.filter-chevron svg{width:14px!important;height:14px!important}@media(max-width:700px){.mobile-nav-close{display:grid;place-items:center;position:absolute;right:10px;top:10px;width:28px;height:28px;padding:4px;background:transparent;border:0;color:#c4d7c7;border-radius:4px}.mobile-nav-close svg{width:16px;height:16px}}
+.import-log.physical-preview{max-height:none;overflow:visible}.physical-preview h3{font-size:12px;margin:16px 0 8px}.physical-preview .admin-cards{grid-template-columns:repeat(4,minmax(0,1fr))}.physical-preview .data-table{min-width:560px}@media(max-width:700px){.physical-preview .admin-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+html{scroll-padding-top:84px}@media(max-width:700px){html{scroll-padding-top:72px}}

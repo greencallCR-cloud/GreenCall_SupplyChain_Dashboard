@@ -61,7 +61,7 @@ jobs:
         env:
           GREENCALL_TEST_POSTGRES_CONTAINER: greencall-ci-pg
           GREENCALL_BENCHMARK_SNAPSHOTS: '1'
-        run: node --test tools/snapshot-store.test.mjs
+        run: node --test tools/snapshot-store.test.mjs tools/physical-service.test.mjs
       - name: Remove only the disposable test container
         if: always()
         run: docker stop greencall-ci-pg || true

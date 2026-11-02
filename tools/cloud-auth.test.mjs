@@ -53,3 +53,28 @@ test('login validates media type, JSON, method and bounded body without leaking 
     assert.equal(r.status,status);assert.ok(!(await r.text()).includes(key));
   }
 });
+test('separate admin key grants an admin role; access key stays read-only',async()=>{
+  const admin='test-admin-key-only-2222222222222222222222222222';
+  const auth=createCloudAuth({env:{...env,GREENCALL_ADMIN_KEY:admin}});
+  const viewer=(await login(auth)).headers.get('set-cookie').split(';')[0];
+  const adminResult=await login(auth,admin);
+  assert.equal(adminResult.status,200);assert.equal((await adminResult.json()).role,'admin');
+  const adminCookie=adminResult.headers.get('set-cookie').split(';')[0];
+  assert.ok(!adminCookie.includes(admin));
+  const as=c=>request('/api/physical/apply',{method:'POST',headers:{cookie:c,origin:'https://preview.example'}});
+  assert.equal(auth.role(as(viewer)),'viewer');assert.equal(auth.role(as(adminCookie)),'admin');
+  assert.equal(auth.authorizeAdmin(as(viewer)).status,403);
+  assert.equal(auth.authorizeAdmin(as(adminCookie)),null);
+  assert.equal(auth.authorizeAdmin(request('/api/physical/apply',{method:'POST'})).status,401);
+  assert.equal(auth.authorizeAdmin(request('/api/physical/apply',{method:'POST',headers:{cookie:adminCookie,origin:'https://other.example'}})).status,403);
+  assert.equal(auth.authorize(as(adminCookie)),null,'admins can also read');
+});
+test('admin role fails closed when the admin key is absent, short or equal to the access key',async()=>{
+  for(const value of [undefined,'short',key]){
+    const auth=createCloudAuth({env:{...env,GREENCALL_ADMIN_KEY:value}});
+    const cookie=(await login(auth)).headers.get('set-cookie').split(';')[0];
+    const r=auth.authorizeAdmin(request('/api/physical/apply',{method:'POST',headers:{cookie,origin:'https://preview.example'}}));
+    assert.equal(r.status,503);assert.equal((await r.json()).code,'ADMIN_NOT_CONFIGURED');
+    if(value===key)assert.equal(auth.role(request('/x',{headers:{cookie}})),'viewer');
+  }
+});

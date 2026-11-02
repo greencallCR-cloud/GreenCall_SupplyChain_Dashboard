@@ -47,12 +47,25 @@ La carpeta de staging tiene un bloqueo exclusivo durante extracción, guardado y
 
 Se rechazan antes de enviar un archivo parcial las descargas de más de 100.000 filas o 4 MiB. Aplicar filtros o reducir el período. La interfaz informa el error sin salir del dashboard. Los archivos descargados contienen información operativa privada: conservarlos sólo en el entorno autorizado. Los tests de esta implementación usan exclusivamente fixtures sintéticos.
 
+## Tomas físicas Cloud (carga manual habitual)
+
+Flujo: `POST /api/physical/preview` (no escribe) → `POST /api/physical/apply` (con `x-file-sha256` y `x-base-snapshot` devueltos por la vista previa) → `GET /api/physical/batches` (historial) → `POST /api/physical/revert` (`{batch_id, base_snapshot_id}`). Google Sheets nunca se escribe.
+
+- **Acceso:** leer el historial exige sesión; previsualizar, aplicar y revertir exigen la clave de administración `GREENCALL_ADMIN_KEY` (≥32 caracteres, distinta de `GREENCALL_ACCESS_KEY`) y mismo origen. La cookie firmada lleva el rol; sin clave admin válida el rol es siempre lectura (`ADMIN_NOT_CONFIGURED`, 503). La identidad es compartida (`actor = admin_key`): no hay todavía usuarios individuales.
+- **Escritura separada:** `GREENCALL_PHYSICAL_DATABASE_URL` usa un rol distinto del runtime de lectura: `USAGE` en `greencall_private`, `SELECT` en sus tablas, `INSERT` en `snapshots`, `snapshot_chunks` y `physical_import_batches`, `INSERT/UPDATE` en `active_snapshot`. Sin esa variable la API responde `SIN_CREDENCIALES` y la UI lo declara; no se simula ninguna carga.
+- **Migración:** aplicar `db/migrations/20261102_001_physical_imports.sql` después de `20261031_001_snapshots.sql`, primero en una rama Neon de desarrollo con conexión directa. Es aditiva e idempotente; la bitácora es append-only (trigger) y admite una sola reversión por lote (índice único parcial).
+- **Validación:** XLSX/XLSM/CSV ≤4 MiB y ≤20.000 filas; sólo hojas con encabezados de toma física (las demás se informan como ignoradas). Errores bloqueantes por fila y campo: fecha ausente/inválida/futura (hora de Costa Rica), técnico o SKU ausente, SKU excluido `7005189`, conteo ausente o negativo, conteo fraccionario en unidades de pieza, duplicado con conteo distinto. Avisos: SKU fuera de catálogo, unidad ausente o ambigua, técnico fuera de `Tecnicos`, fila serializada (conteo agregado, no prueba series) y duplicado idéntico. Los totales se muestran por unidad sin sumarlas entre sí.
+- **Integridad:** el lote y la activación del nuevo snapshot se confirman en la misma transacción con CAS sobre el snapshot de la vista previa. Si otra publicación ocurrió entre medio, nada se escribe (`SNAPSHOT_CONFLICT`) y se debe volver a previsualizar. El reintento del mismo archivo sobre la misma base es idempotente. Los conteos efectivos se reconstruyen como conteos legados + reproducción ordenada de los lotes no revertidos; por eso revertir restaura el valor anterior exacto y, si no quedan lotes, reactiva el snapshot inmutable original. `captured_at` de Sheets no cambia con una toma física; la fecha de carga queda en la fuente `physical_counts`.
+- **Rollback operativo:** revertir el lote desde la UI o la API; nunca borrar filas. Ante `LEDGER_MISMATCH` (snapshot con lotes ausentes de la bitácora) no importar hasta reconciliar.
+- **QA:** `tools/physical-import.test.mjs`, `tools/physical-service.test.mjs` (incluye PostgreSQL desechable), `tools/cloud-physical.test.mjs`, `tools/cloud-auth.test.mjs`. Navegador: `GREENCALL_TEST_POSTGRES_SOCKET=<dir> node tools/qa-physical-cloud-server.mjs` levanta un servidor loopback con datos sintéticos rotulados y una base desechable.
+
 ## Validación reproducible
 
 ```sh
 npm ci --ignore-scripts
 npm run check
 npm test
+GREENCALL_TEST_POSTGRES_SOCKET=/ruta/socket node --test tools/snapshot-store.test.mjs tools/physical-service.test.mjs  # PostgreSQL desechable local (o GREENCALL_TEST_POSTGRES_CONTAINER)
 npm run ui:test
 npm run cloud:dev
 ```
@@ -63,4 +76,4 @@ npm run cloud:dev
 
 ## Pendientes de producción
 
-Identidad por usuario y roles; limitación persistente de intentos; lectura/sincronización real desde el runtime autorizado; comparación completa de datos privados y cortes; medición operativa de rendimiento; importación física persistente en Cloud; pruebas de recuperación en la rama remota. La importación física local y los importadores legacy se conservan.
+Identidad por usuario y roles; limitación persistente de intentos; lectura/sincronización real desde el runtime autorizado; comparación completa de datos privados y cortes; medición operativa de rendimiento; aplicar la migración física y crear el rol escritor en una rama Neon de desarrollo; pruebas de recuperación en la rama remota. La importación física local y los importadores legacy se conservan.

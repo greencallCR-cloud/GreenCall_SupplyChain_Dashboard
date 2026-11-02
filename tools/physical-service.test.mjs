@@ -157,3 +157,17 @@ test('PostgreSQL ledger: atomic activation, idempotency, revert and append-only'
     assert.equal(grants[0].n, 0);
   });
 });
+
+test('reverting the only batch over legacy counts reactivates the exact original snapshot', async () => {
+  const initial = seed();
+  initial.tables.physical_counts = [{ take: 'LEGACY', date: '2026-09-30', tech: 'TEST-T1', sku: 'TEST-M', count: 12 }];
+  initial.sources.physical_counts = { source_type: 'PRIVATE_PHYSICAL_COUNT_XLSX', source_tab: 'Toma histórica', original_data_rows: 1, retrieved_at: retrieved, sanitized: true };
+  const stores = memoryStores(initial), service = createPhysicalService({ ...stores, clock });
+  const original = stores.state().active;
+  const buffer = file(line('K', 'TEST-M', 5));
+  const p = await service.preview({ buffer, filename: 'toma.xlsx' });
+  const applied = await service.apply({ buffer, filename: 'toma.xlsx', expectedSha: p.file.sha256, baseSnapshotId: p.base_snapshot.id });
+  assert.equal(stores.state().snapshots.get(applied.snapshot_id).data.sources.physical_counts.source_tab, 'Toma histórica');
+  const reverted = await service.revert({ batchId: applied.batch_id, baseSnapshotId: applied.snapshot_id });
+  assert.equal(reverted.snapshot_id, original);
+});
