@@ -8,14 +8,14 @@ La palabra «VERIFICADO» requiere evidencia de código + prueba + fuente/corte;
 | DATA01 | Consumos completos | conteo de origen por corte, hash y conciliación sin pérdidas | NO VERIFICADO CLOUD |
 | DATA02 | Órdenes únicas | 8 líneas misma orden = 1 orden; fecha válida | CONTRATO VERIFICADO: snapshot-store/domain-integrity; contraste conectado de columnas mínimas, sin snapshot privado integral |
 | DATA03 | Apariciones `(orden,SKU)` | 4 líneas mismo par = 1 aparición | CONTRATO VERIFICADO: snapshot-store; falta paridad operativa Cloud |
-| DATA04 | UDM no mezcladas | M, PZA, ML separados; cero vs desconocido | NO VERIFICADO CLOUD |
-| DATA05 | Catálogo y costos | SKU+centro+almacén+lote y IVA 13%, faltantes no cero | NO VERIFICADO CLOUD |
-| DISP01 | Despachos integrados | 12 series una acta = 1 evento, ambas pestañas unidas | NO VERIFICADO CLOUD |
+| DATA04 | UDM no mezcladas | M, PZA, ML separados; cero vs desconocido | VERIFICADO CON SNAPSHOT REAL: resolvedor único de UDM (catálogo + reglas del negocio); stock sin UDM 33→0; tests catalog/dispatch |
+| DATA05 | Catálogo y costos | SKU+centro+almacén+lote y IVA 13%, faltantes no cero | VERIFICADO CON SNAPSHOT REAL: resolvedor de costos con contexto/referencia/descripción; ABC sin costo 7→1; sin ₡0 sustitutos |
+| DISP01 | Despachos integrados | 12 series una acta = 1 evento, ambas pestañas unidas | VERIFICADO CON SNAPSHOT REAL: evento = técnico + fecha en ambas pestañas; 492→476; 15 excepciones auditables |
 | INV01 | Inventario real por ubicación | bodega+todos técnicos; filtros, corte y conciliación | NO VERIFICADO CLOUD |
 | INV02 | SAP/ETA | excluir no SAP/consumida/devuelta/cobrada; último despacho; ETA no físico | NO VERIFICADO CLOUD |
 | PHYS01 | Excel físico | preview, dos tomas por técnico/SKU, ajustes, idempotencia y rollback | VERIFICADO CON FIXTURES + POSTGRESQL DESECHABLE: preview sin escrituras, validación por fila/campo, CAS+bitácora en una transacción, idempotencia, reversión que restaura el valor previo, append-only; E2E navegador desktop/móvil con datos sintéticos. Falta migración/rol escritor en Neon y datos reales |
-| ABC01 | Super ABC | valor y frecuencia, matriz y sin costos falsos | NO VERIFICADO CLOUD |
-| FCAST01 | Órdenes y SKU | cortes mensuales, baseline y modelo por serie | NO VERIFICADO CLOUD |
+| ABC01 | Super ABC | valor y frecuencia, matriz y sin costos falsos | VERIFICADO CON SNAPSHOT REAL: 1/36 sin clase por falta real de precio; valor parcial explícito |
+| FCAST01 | Órdenes y SKU | cortes mensuales, baseline y modelo por serie | VERIFICADO CON SNAPSHOT REAL: "Sin datos" 19→1; meses faltantes sin imputar; contraste statsmodels |
 | FCAST02 | Selección estadística | rolling-origin sin fuga, WAPE/MAE/sMAPE, intermitentes | VERIFICADO CON FIXTURES: selector h=1 y evaluación externa anidada h=3/6/12; plazos desplazados por meses parciales, 27 tests y referencias Statsmodels/Polars. Falta certificación operativa |
 | FCAST03 | No serializados | despacho como proxy, consumo físico con dos conteos | NO VERIFICADO CLOUD |
 | SYNC01 | Actualización Sheets | readonly, schema drift, reintentos, filas nuevas/corregidas, integridad | ADAPTADOR VERIFICADO: qa_sheets_sync 13/13; worker con bloqueo/CAS y preservación física. Falta credencial del runtime |

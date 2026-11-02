@@ -38,3 +38,8 @@ test('a month dominated by invalid quantities stays unknown, never zero', () => 
   const f = analyze(data({ atypical: 10 }), {}, {}).forecasts.find(x => x.sku === '9200002');
   assert.ok(f.history.some(h => h.units === null), '10 of 70 rows invalid (>2%) keeps the month unknown');
 });
+
+test('forecast list leads with the most active systemic material', () => {
+  const f = analyze(data(), {}, {}).forecasts;
+  assert.equal(f[0].sku, '9200002', '1080 orders before the 30-order legacy SKU');
+});

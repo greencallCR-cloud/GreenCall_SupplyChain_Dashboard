@@ -142,6 +142,25 @@
 - **No es aún funcional con datos:** faltan variables en Vercel (archivo privado de secretos generado en esta sesión) y la cuenta de servicio Google para el primer snapshot. Al configurarlas: redeploy de Production, login con la clave admin, `/api/status` debe mostrar base `connected`, y tras el primer sync `data.state=ready`.
 - PR #1 de Codex queda abierto/borrador; su contenido ya está integrado en `main` vía #2.
 
+## Hito 2026-11-02 (noche) — Auditoría integral de 8 capturas: gráficos, costos, UDM, despachos, forecast
+Fuente del mandato: ZIP `GreenCall_Claude_Code_Auditoria_Integral_20261102` (Prompt Maestro + 8 capturas, revisadas una por una). Reproducción sobre el **snapshot real activo** (captura 2026-11-02 03:29 UTC, 173.760 filas de Consumos) leído localmente con el rol lector (`tools/qa-local-snapshot-server.mjs`, loopback; sin datos en Git).
+
+| Problema | Causa demostrada | Corrección | Evidencia |
+|---|---|---|---|
+| Gráficos en blanco (todas las pestañas) | `svg{width:20px;height:20px;fill:none}` global aplicaba a las capas SVG de Plotly (main-svg 20×20) | Regla limitada a `svg:not(.js-plotly-plot svg)`; catch de Plotly | `tools/chart-render.test.mjs` (rojo→verde en Chromium); 25 gráficos/11 pestañas a tamaño completo con datos reales, desktop y 390 px; PR #3 en Production |
+| "Costo pendiente" | Varios precios por SKU → null; filas del catálogo sin SKU nunca coincidían | `src/catalog.mjs`: SKU+contexto → único → referencia valorada (centro principal/A000/VALORADO) → conflicto explícito; descripción/alias; marcadores SIN SKU/NO SAP | ABC sin costo 7→1 (4011388 no tiene precio en catálogo); forecast sin costo 13→5 (materiales sin fila de precio: UTP exterior, clivers, cinta etiquetadora, toallas, 4011388) |
+| "SIN UNIDAD CONFIRMADA" | Sólo se leían filas con SKU y UDM | Reglas del negocio: CABLE DROP, tensores, maja dedos, clivers, cintas = PZA; UTP exterior = M | Stock sin UDM 33→0; despachos sin UDM 137→1 (TOALLAS, excluida de rotación) |
+| Forecast "Sin datos" | 630 filas del 26–28/06/2026 traen en Cantidad los 5 primeros dígitos del SKU; un mes desconocido bloqueaba todo; meses previos a la introducción contaban como cero | Filas atípicas ≤2 % del mes excluidas; recorte previo a 1.ª aparición; mes interior desconocido = observación faltante (sin imputar); límites de seguridad | "Sin datos" 19→1 (proxy TENSORES con 3/7 meses no verificables). RJ45 ma6 M+1 2392, WAPE 12,1 % (naive 20,2 %); statsmodels local-level (NaN nativo) 2352 |
+| ABC valor nulo con costo | Una fila de cantidad inválida anulaba el valor del SKU | Valor de filas válidas + `value_partial` + cobertura y fuente del costo; tabla con SKU, UM, costo del período | 1 de 36 SKU sin clase (sin precio real) |
+| Despachos duplicados | Identidad = acta si existía, si no técnico+fecha | Evento = técnico + fecha local en ambas pestañas; acta como evidencia; varias actas = excepción auditable | 492→476 eventos; 15 excepciones registradas |
+| Tablas truncadas | `table()` cortaba a N filas | Paginación 20/50/100, búsqueda, orden por columna, conteo y posición | Rotación: 468 filas, página 2 distinta, búsqueda TENSOR → 27 (todas PZA) |
+| Taller ₡0 | Base inicializada en 0 | `null` = sin costo verificable; marcadores resueltos por descripción exacta | Sin ₡0 engañosos |
+
+Pruebas: `npm test` 126 aprobadas / 0 fallos (4 omitidas: PostgreSQL/benchmark opt-in, cubiertas en CI). 3 pruebas previas de forecast-v2 se actualizaron a la nueva política manteniendo su propósito (un mes desconocido nunca cuenta como cero) y se añadió el caso de borde (último mes desconocido sigue bloqueando).
+Skills usadas con efecto: superpowers:test-driven-development (rojo→verde por hallazgo), anthropic-skills:agent-browser (reproducción y auditoría de gráficos/paginación con datos reales), statsmodels (validación independiente), ecc:security-reviewer (hito previo).
+No verificado: sesión autenticada en Production (las claves de Vercel difieren de las generadas en esta sesión); precios de materiales sin fila en el catálogo; Quiebre de política/Planning sin cambios funcionales en este hito.
+Próxima acción: completar la verificación en Production con un acceso válido; Planning con costos reconciliados; rendimiento (el snapshot tarda ~16 s en cargarse por petición: cachear por id de snapshot en la función).
+
 ## Recuperación después de límite/cuota o nueva conversación
 1. Reabrir este repositorio/entorno Codex publicado.
 2. Leer `AGENTS.md` y este checkpoint, mirar SHA real y git status/diff.

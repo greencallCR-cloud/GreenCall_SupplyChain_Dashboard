@@ -38,3 +38,18 @@ test('proxy items get catalog cost by description and their business unit', () =
   const sku = d.insights.dispatch.sku.find(r => /TENSOR/.test(r.description || r.sku));
   assert.equal(sku.missing_cost, 0); assert.equal(sku.amount_base, 30);
 });
+
+test('a dispatch event is technician + local date across serialized and non-serialized sources', () => {
+  const d = data();
+  d.tables.dispatch_serial = [
+    { date: '2026-09-01', tech: 'T-1', tech_name: 'TECNICO SINTETICO', sku: '9100001', description: 'CONECTOR SINTETICO', serial: 'S-1', acta: 'A-9' },
+    { date: '2026-09-01', tech: 'T-2', tech_name: 'OTRO SINTETICO', sku: '9100001', description: 'CONECTOR SINTETICO', serial: 'S-2', acta: 'A-7' },
+    { date: '2026-09-02', tech: '', tech_name: '', sku: '9100001', description: 'CONECTOR SINTETICO', serial: 'S-3', acta: 'A-8' },
+  ];
+  // T-1 on 2026-09-01 appears with actas A-1 (non-serialized) and A-9 (serialized): ONE event.
+  d.tables.technicians.push({ tech: 'T-2', name: 'OTRO SINTETICO', status: 'Activo' });
+  const ds = analyze(d, {}, {}).insights.dispatch;
+  assert.equal(ds.orders, 3, 'T-1/09-01 + T-2/09-01 + acta-only fallback');
+  assert.ok(ds.conflicts.some(c => /ACTAS/.test(c.reason)), 'several actas for one technician-day are recorded as an exception');
+  assert.equal(ds.lines, 6);
+});
