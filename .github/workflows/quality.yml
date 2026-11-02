@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop-cloud, 'codex/**', main]
   pull_request:
-    branches: [develop-cloud]
+    branches: [develop-cloud, main]
   workflow_dispatch:
 
 permissions:

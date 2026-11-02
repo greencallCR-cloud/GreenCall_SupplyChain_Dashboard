@@ -142,7 +142,7 @@ async function regression(){
     return new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('QA harness did not start')),15000);child.stdout.on('data',chunk=>{output+=chunk;const found=output.match(/http:\/\/127\.0\.0\.1:\d+/);if(found){clearTimeout(timer);resolve(found[0])}});child.on('exit',()=>{clearTimeout(timer);reject(Error('QA harness exited'))});child.on('error',()=>{clearTimeout(timer);reject(Error('QA harness unavailable'))})});
   }
   function open(origin,login=false){ab('open',origin+'/#overview');ab('wait','--fn','!document.querySelector("#content .loader")');if(login&&ev('!!document.getElementById("accessToken")')){ab('fill','#accessToken',token);ab('click','#accessSubmit');ab('wait','--fn','!document.getElementById("accessToken")&&!document.querySelector("#content .loader")')}}
-  function goto(page){ev(`document.querySelector('#nav a[data-page="${page}"]').click()`);ab('wait','--fn','!document.querySelector("#content .loader")&&[...document.querySelectorAll("#content .plot")].every(el=>el.querySelector(".main-svg,.empty-state"))')}
+  function goto(page){ev(`document.querySelector('#nav a[data-page="${page}"]').click()`);ab('wait','--fn','!document.querySelector("#content .loader")&&[...document.querySelectorAll("#content .plot")].every(el=>el.querySelector(".empty-state")||(el.querySelector(".main-svg")?.getBoundingClientRect().width>120&&el.querySelector(".main-svg")?.getBoundingClientRect().height>120))')}
   const viewports=[[1920,1080],[1366,768],[768,1024],[390,844],[360,800]];
   const pages=['overview','inventory','consumptions','dispatch','rotation','policy','abc','forecast','planning','charges','workshop','technicians','physical','quality','admin'];
   try{
