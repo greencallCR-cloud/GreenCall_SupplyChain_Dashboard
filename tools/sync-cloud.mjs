@@ -7,7 +7,8 @@
  * Read Sheets through the existing spreadsheets.readonly implementation:
  *   node tools/sync-cloud.mjs --from-sheets --staging-dir /private/greencall
  * Publication additionally requires --apply, GREENCALL_ALLOW_SNAPSHOT_WRITE=1,
- * GREENCALL_SNAPSHOT_ENV=development and DATABASE_URL for an isolated dev branch.
+ * GREENCALL_SNAPSHOT_ENV=development and DATABASE_URL for an isolated dev branch, or
+ * GREENCALL_SNAPSHOT_ENV=production + GREENCALL_ALLOW_PRODUCTION_SNAPSHOT=1 + GREENCALL_SYNC_DATABASE_URL.
  * The migration must already have been reviewed/applied by the operator. This
  * worker cannot infer Neon branch identity from opaque endpoint hostnames.
  */
@@ -44,18 +45,32 @@ function argumentsFor(argv) {
   if (!args.help && (Number(args.fromSheets) + Number(Boolean(args.fromFile)) !== 1 || args.fromSheets && !args.stagingDir)) throw fail('INVALID_SYNC_ARGUMENTS', 'Seleccione un archivo privado o Sheets con carpeta de staging privada.');
   return args;
 }
+// Development: DATABASE_URL of an isolated branch. Production: second explicit flag and the
+// least-privilege sync role (GREENCALL_SYNC_DATABASE_URL); owner roles are refused.
 function checkWriteTarget(env) {
-  if (env.GREENCALL_ALLOW_SNAPSHOT_WRITE !== '1' || env.GREENCALL_SNAPSHOT_ENV !== 'development' || !env.DATABASE_URL || env.VERCEL_ENV === 'production' || env.NODE_ENV === 'production') throw fail('SNAPSHOT_WRITE_DISABLED', 'Publicar requiere --apply, permiso explícito y una conexión de desarrollo aislada.');
+  const disabled = message => fail('SNAPSHOT_WRITE_DISABLED', message);
+  if (env.GREENCALL_ALLOW_SNAPSHOT_WRITE !== '1') throw disabled('Publicar requiere --apply, permiso explícito y una conexión autorizada.');
+  let target;
+  if (env.GREENCALL_SNAPSHOT_ENV === 'development') {
+    if (env.VERCEL_ENV === 'production' || env.NODE_ENV === 'production') throw disabled('Un destino de desarrollo no puede ejecutarse en un runtime de producción.');
+    target = env.DATABASE_URL;
+  } else if (env.GREENCALL_SNAPSHOT_ENV === 'production') {
+    if (env.GREENCALL_ALLOW_PRODUCTION_SNAPSHOT !== '1') throw disabled('Publicar en producción requiere GREENCALL_ALLOW_PRODUCTION_SNAPSHOT=1.');
+    target = env.GREENCALL_SYNC_DATABASE_URL;
+  } else throw disabled('Defina GREENCALL_SNAPSHOT_ENV=development o production.');
+  let connection;
   try {
-    const connection = new URL(env.DATABASE_URL);
+    connection = new URL(target);
     if (!['postgres:', 'postgresql:'].includes(connection.protocol) || !connection.hostname) throw new Error();
-  } catch { throw fail('SNAPSHOT_WRITE_DISABLED', 'La conexión privada de desarrollo no es válida.'); }
+  } catch { throw disabled('La conexión privada de publicación no es válida.'); }
+  if (env.GREENCALL_SNAPSHOT_ENV === 'production' && /owner|admin|postgres$/i.test(decodeURIComponent(connection.username))) throw disabled('Producción exige el rol de sincronización con privilegios mínimos, no el propietario.');
+  return { ...env, DATABASE_URL: target };
 }
 
 export async function runSyncCloud({ argv = process.argv.slice(2), env = process.env, publish = publishSnapshot, fetchImpl = fetch, loadActiveSnapshot = loadSnapshot, getActiveSnapshotId = readActiveSnapshotId } = {}) {
   const args = argumentsFor(argv);
   if (args.help) return { help: HELP };
-  if (args.apply) checkWriteTarget(env);
+  if (args.apply) env = checkWriteTarget(env);
   let data, expectedSnapshotId, release;
   try {
     if (args.fromFile) {

@@ -503,3 +503,24 @@ test('sync CLI requires explicit write authorization and a development target', 
     assert.equal(writes, 1);
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
+
+test('production sync needs a second explicit flag and the least-privilege sync role', async () => {
+  const { runSyncCloud } = await import('./sync-cloud.mjs');
+  const base = { GREENCALL_ALLOW_SNAPSHOT_WRITE: '1', GREENCALL_SNAPSHOT_ENV: 'production' };
+  for (const env of [
+    { ...base, GREENCALL_SYNC_DATABASE_URL: 'postgres://gc_sheets_sync:x@synthetic.invalid/db' },                                  // missing second flag
+    { ...base, GREENCALL_ALLOW_PRODUCTION_SNAPSHOT: '1', DATABASE_URL: 'postgres://gc_dashboard_read:x@synthetic.invalid/db' },     // no sync role URL
+    { ...base, GREENCALL_ALLOW_PRODUCTION_SNAPSHOT: '1', GREENCALL_SYNC_DATABASE_URL: 'postgres://neondb_owner:x@synthetic.invalid/db' }, // owner refused
+  ]) await assert.rejects(runSyncCloud({ argv: ['--from-file', '/private/test.json', '--apply'], env }), { code: 'SNAPSHOT_WRITE_DISABLED' });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'greencall-sync-test-'));
+  try {
+    const source = path.join(dir, 'snapshot.json');
+    await writePrivateSnapshot(source, fixture());
+    let target = null;
+    const summary = await runSyncCloud({ argv: ['--from-file', source, '--apply'], env: { ...base, GREENCALL_ALLOW_PRODUCTION_SNAPSHOT: '1', GREENCALL_SYNC_DATABASE_URL: 'postgres://gc_sheets_sync:x@synthetic.invalid/db', DATABASE_URL: 'postgres://gc_dashboard_read:x@synthetic.invalid/db' },
+      getActiveSnapshotId: async ({ env }) => { assert.match(env.DATABASE_URL, /gc_sheets_sync/); return null; },
+      publish: async (data, options) => { target = options.env.DATABASE_URL; return { id: 'TEST-PROD' }; } });
+    assert.equal(summary.mode, 'published');
+    assert.match(target, /gc_sheets_sync/, 'publication uses the sync role, never the read role');
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});

@@ -1,0 +1,71 @@
+name: GreenCall Sheets sync (read-only)
+
+# Google Sheets -> validated private snapshot -> Neon (least-privilege sync role).
+# Sheets is only READ (spreadsheets.readonly). The repository is public, so this job
+# never prints data, row counts, hashes or connection strings: only a status code.
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   GREENCALL_GOOGLE_SERVICE_ACCOUNT_JSON  service-account key with Viewer access to the sheet
+#   GREENCALL_SYNC_DATABASE_URL            gc_sheets_sync role connection string
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: greencall-sheets-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check required secrets
+        id: secrets
+        env:
+          GOOGLE_JSON: ${{ secrets.GREENCALL_GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SYNC_URL: ${{ secrets.GREENCALL_SYNC_DATABASE_URL }}
+        run: |
+          if [ -z "$GOOGLE_JSON" ] || [ -z "$SYNC_URL" ]; then
+            echo "::notice::Sync skipped: GREENCALL_GOOGLE_SERVICE_ACCOUNT_JSON / GREENCALL_SYNC_DATABASE_URL not configured."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.secrets.outputs.ready == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund --omit=dev
+      - name: Read Sheets and publish snapshot
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GOOGLE_JSON: ${{ secrets.GREENCALL_GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GREENCALL_SYNC_DATABASE_URL: ${{ secrets.GREENCALL_SYNC_DATABASE_URL }}
+          GREENCALL_ALLOW_SNAPSHOT_WRITE: '1'
+          GREENCALL_SNAPSHOT_ENV: production
+          GREENCALL_ALLOW_PRODUCTION_SNAPSHOT: '1'
+        run: |
+          umask 077
+          PRIVATE="$RUNNER_TEMP/greencall-private"
+          mkdir -p "$PRIVATE/staging"
+          printf '%s' "$GOOGLE_JSON" > "$PRIVATE/google.json"
+          set +e
+          GREENCALL_GOOGLE_CREDENTIAL_FILE="$PRIVATE/google.json" \
+            node tools/sync-cloud.mjs --from-sheets --staging-dir "$PRIVATE/staging" --apply > "$PRIVATE/result.json" 2> "$PRIVATE/error.json"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            node -e "const r=require(process.argv[1]);console.log('sync ok: mode='+r.mode)" "$PRIVATE/result.json"
+          else
+            node -e "try{const r=require(process.argv[1]);console.log('sync failed: '+r.code)}catch{console.log('sync failed')}" "$PRIVATE/error.json"
+          fi
+          rm -rf "$PRIVATE"
+          exit "$status"
