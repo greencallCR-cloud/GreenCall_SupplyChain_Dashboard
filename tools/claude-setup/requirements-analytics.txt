@@ -1,0 +1,9 @@
+# Entorno Python AISLADO para análisis/forecast de GreenCall Supply Chain BI.
+# Se instala en ~/.greencall-sc/venv (nunca en el Python del sistema).
+# Versiones verificadas juntas el 2026-11-02 (statsmodels 0.14.x NO es compatible con pandas 3).
+statsmodels==0.15.0
+polars==2.1.0
+numpy==2.5.4
+scipy==1.18.1
+pandas==3.1.0
+patsy==1.0.3

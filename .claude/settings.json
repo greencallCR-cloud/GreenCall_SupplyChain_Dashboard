@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "greencall-sc-local": {
+      "source": {
+        "source": "directory",
+        "path": "./vendor/claude-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "build-web-data-visualization@greencall-sc-local": true
+  }
+}

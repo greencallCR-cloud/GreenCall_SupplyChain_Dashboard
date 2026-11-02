@@ -19,3 +19,6 @@ local-data/sheets-sync.json
 local-data/*.backup
 local-data/*.bak
 local-data/*.tmp*
+
+# Claude Code: configuración personal no versionada
+.claude/settings.local.json

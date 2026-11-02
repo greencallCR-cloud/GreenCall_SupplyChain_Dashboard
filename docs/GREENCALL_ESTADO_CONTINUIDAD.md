@@ -27,6 +27,13 @@
 - Próxima acción **ejecutable** con comando/ruta precisa:
 - Último commit/push/PR:
 
+## Hito 2026-11-02 — Preparación de Claude Code (sin cambios de aplicación)
+- Rama `claude/sweet-lovelace-dltfpk` (fast-forward desde `develop-cloud` `bc8429c`).
+- Skills de proyecto en `.claude/skills/` (+ `skills-lock.json`), plugin local `build-web-data-visualization`, `CLAUDE.md`, `tools/claude-setup/`.
+- Detalle, pruebas, persistencia y bloqueos: `docs/CLAUDE_CODE_ENTORNO_CHECKPOINT.md`.
+- Tests: `npm run check` OK; `npm run cloud:test` 6/6; `validate`/`start` bloqueados por falta de `local-data/base.json` (privado).
+- Próxima acción: nueva sesión → `bash tools/claude-setup/setup.sh` → primer hito vertical según `AGENTS.md`.
+
 ## Recuperación después de límite/cuota o nueva conversación
 1. Reabrir este repositorio/entorno Codex publicado.
 2. Leer `AGENTS.md` y este checkpoint, mirar SHA real y git status/diff.

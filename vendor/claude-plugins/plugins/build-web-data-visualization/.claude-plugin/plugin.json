@@ -1,0 +1,8 @@
+{
+  "name": "build-web-data-visualization",
+  "version": "0.1.21",
+  "description": "Design, critique, implement, test, and export web data visualizations: charts, dashboards, maps, Gantt, UML, reports, mobile views, shareable state.",
+  "author": { "name": "OpenAI" },
+  "license": "MIT",
+  "repository": "https://github.com/openai/plugins"
+}
