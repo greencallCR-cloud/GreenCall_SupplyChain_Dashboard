@@ -1,0 +1,13 @@
+{
+  "name": "greencall-sc-local",
+  "owner": { "name": "GreenCall Supply Chain BI" },
+  "description": "Plugins de terceros vendorizados para este repositorio (solo GreenCall Supply Chain & Inventory BI).",
+  "plugins": [
+    {
+      "name": "build-web-data-visualization",
+      "source": "./plugins/build-web-data-visualization",
+      "description": "Guía de visualización web de datos (router data-visualization + especialistas). Origen: openai/plugins, licencia MIT.",
+      "version": "0.1.21"
+    }
+  ]
+}

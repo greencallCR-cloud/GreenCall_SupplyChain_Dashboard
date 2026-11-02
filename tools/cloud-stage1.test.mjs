@@ -11,24 +11,25 @@ const req=(path='/api/status',method='GET')=>new Request('http://localhost:8788'
 test('API status da JSON sin declarar datos migrados',async()=>{
  const current=process.env.DATABASE_URL;delete process.env.DATABASE_URL;
  try{
-  const r=await status(req());const d=await r.json();
+  const r=await status.fetch(req());const d=await r.json();
   assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/application\/json/);
-  assert.equal(d.database.state,'not_configured');assert.equal(d.data.state,'pending_migration');
+  assert.equal(d.database.state,'not_verified');assert.equal(d.data.state,'not_configured');
   assert.equal(d.authenticated,false);assert.deepEqual(d.sources,{});
   assert.equal(r.headers.get('cache-control').includes('no-store'),true);
  } finally { if(current!==undefined)process.env.DATABASE_URL=current; }
 });
 test('API status rechaza métodos de escritura',async()=>{
- const r=await status(req('/api/status','POST'));assert.equal(r.status,405);
+ const r=await status.fetch(req('/api/status','POST'));assert.equal(r.status,405);
 });
 test('Dashboard y filas no inventan resultados',async()=>{
  for(const handler of [dashboard,rows]){
-  const r=await handler(req());assert.equal(r.status,503);
-  const d=await r.json();assert.equal(d.code,'DATA_MIGRATION_PENDING');
+  const r=await handler.fetch(req(handler===dashboard?'/api/dashboard':'/api/rows'));assert.equal(r.status,503);
+  const d=await r.json();assert.equal(d.code,'ACCESS_NOT_CONFIGURED');
  }
 });
 test('Sheets informa explícitamente falta de sincronización',async()=>{
- const d=await (await sheets(req())).json();assert.equal(d.state,'SIN_CONFIGURAR');
+ const r=await sheets.fetch(req('/api/sheets/status'));assert.equal(r.status,503);
+ assert.equal((await r.json()).code,'ACCESS_NOT_CONFIGURED');
 });
 test('Neon verifica nombre de base y no divulga contraseña',async()=>{
  const url='postgresql://user:secret@db.local/greencall_bi';

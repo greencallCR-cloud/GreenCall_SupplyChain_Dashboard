@@ -1,5 +1,2 @@
-import { dataPending, methodGuard } from '../lib/cloud-response.mjs';
-export default async function handler(request) {
-  const invalid = methodGuard(request);
-  return invalid || dataPending();
-}
+import {createCloudApi} from '../lib/cloud-api.mjs';
+export default {fetch:request=>createCloudApi()(request)};

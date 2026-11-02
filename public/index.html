@@ -1,2 +1,63 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#7C2D12"><title>GreenCall · Supply Chain Intelligence</title><link rel="stylesheet" href="/assets/styles.css"><script defer src="/assets/plotly.min.js"></script><script type="module" defer src="/assets/app.js"></script></head>
-<body><div class="app" id="shell"><aside class="sidebar" id="sidebar"><div class="side-brand"><div class="brand-icon">GC<span>↗</span></div><div class="brand-word">GREENCALL<small>SUPPLY CHAIN BI · SHEETS</small></div></div><div class="side-label">WORKSPACE</div><nav class="nav" id="nav"></nav><div class="side-bottom"><div class="sidebar-banner"><span class="status-orb"></span><span>GOOGLE SHEETS + CACHÉ<small>Sincronización desde servidor local</small></span></div><div class="side-footer">INTELLIGENCE SUITE <b>v1.4</b></div></div></aside><div class="shade" id="shade"></div><div class="workspace"><button class="sidebar-toggle side-edge-toggle" id="menuToggle" title="Mostrar u ocultar navegación" aria-label="Mostrar u ocultar navegación">☰</button><header class="topbar"><div class="top-left"><div class="breadcrumb">GREENCALL <span>/</span> <strong id="currentLocation">Resumen ejecutivo</strong></div></div><div class="top-right"><span class="pill mini" id="cutBadge">CORTE · —</span><span class="pill mini" id="sheetBadge">SHEETS SIN CONFIGURAR</span><span class="pill live"><i></i> <span id="runtimeBadge">VERIFICANDO</span></span><img class="brand-img" src="/assets/claro.png" alt="Claro"></div></header><main><section class="hero"><div><div class="hero-overline"><span class="little-star">✳</span> OPERATIONS INTELLIGENCE <span class="hero-tag">SUPPLY CHAIN · 2026</span></div><h1 id="pageTitle">Control total de su operación.</h1><p id="pageSubtitle">Inventarios, consumo y planificación en un solo lugar, con reglas trazables y datos reales.</p></div><div class="hero-art"><div class="halo h1"></div><div class="halo h2"></div><div class="hero-symbol">↗</div><img src="/assets/greencall.jpeg" alt="GreenCall"></div></section><div id="warning" class="warning"><span class="warning-icon">ⓘ</span><div><strong>Fuentes originales integradas</strong><span>El servidor verificará la disponibilidad de los datos antes de mostrar indicadores. Consulte Calidad para fechas de corte y exclusiones.</span></div><button id="jumpImport">Importar datos →</button></div><section class="filter-strip" aria-label="Filtros globales"><div class="filter-title"><b>◈</b> FILTROS <span>CONTEXTO GLOBAL</span></div><div class="filter-controls"><label>Desde <input type="date" id="fFrom" aria-label="Fecha desde"></label><label>Hasta <input type="date" id="fTo" aria-label="Fecha hasta"></label><label>SKU <select id="fSku"><option value="">Todos los materiales</option></select></label><label>Técnico <select id="fTech"><option value="">Todas las cuadrillas</option></select></label><label>Centro <select id="fCenter"><option value="">Todos los centros</option></select></label><label>Almacén <select id="fWarehouse"><option value="">Todos los almacenes</option></select></label><label>Tecnología <select id="fTechnology"><option value="">Todas las tecnologías</option></select></label><button id="clearFilters" class="btn-quiet">↺ Limpiar</button></div></section><div class="maincontent" id="content"><div class="loader">Analizando los datos locales…</div></div><footer><span>© GreenCall · Supply Chain Intelligence</span><span>Fuente visible · cálculo trazable · sin datos simulados</span></footer></main></div></div><div class="modal" id="focusModal" hidden><div class="modal-card"><div class="modal-head"><b id="focusTitle">Gráfico ampliado</b><button id="closeFocus" aria-label="Cerrar">✕</button></div><div id="focusChart"></div></div></div><div id="toast" class="toast" role="status" aria-live="polite"></div></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183f35">
+  <meta name="description" content="GreenCall Supply Chain: inventario, consumo y planificación con fuentes verificables.">
+  <title>GreenCall | Control de operaciones</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="/assets/plotly.min.js"></script>
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Saltar al contenido</a>
+  <div class="app" id="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+      <a class="side-brand" href="#overview" aria-label="GreenCall, resumen ejecutivo">
+        <img src="/assets/greencall.jpeg" alt="" width="40" height="40">
+        <span class="brand-word" translate="no">GreenCall<small>Supply Chain & Inventory</small></span>
+      </a>
+      <button class="mobile-nav-close" id="closeNav" aria-label="Cerrar navegación"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+      <div class="side-label">Centro de operaciones</div>
+      <nav class="nav" id="nav" aria-label="Módulos"></nav>
+      <div class="side-bottom">
+        <div class="sidebar-banner"><span class="status-orb" id="sourceOrb"></span><span id="sideSource">Verificando fuentes<small>Estado pendiente de verificación</small></span></div>
+        <div class="side-footer"><span>GreenCall Costa Rica</span><span>BI v2</span></div>
+      </div>
+    </aside>
+    <button class="shade" id="shade" aria-label="Cerrar navegación" tabindex="-1"></button>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="top-left">
+          <button class="sidebar-toggle" id="menuToggle" aria-label="Ocultar navegación" aria-controls="sidebar" aria-expanded="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM9 5v14M13 9h4M13 13h4"/></svg></button>
+          <div class="breadcrumb"><span>Operaciones</span><span aria-hidden="true">/</span><strong id="currentLocation">Resumen ejecutivo</strong></div>
+        </div>
+        <div class="top-right">
+          <span class="pill mini" id="cutBadge">Corte sin verificar</span>
+          <span class="pill mini" id="sheetBadge">Fuentes sin verificar</span>
+          <button class="runtime-button" id="sourceHealth" title="Ver salud de fuentes"><i aria-hidden="true"></i><span id="runtimeBadge">Verificando</span></button>
+          <button class="btn-quiet session-button" id="sessionLogout" hidden>Cerrar sesión</button>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <img class="brand-img" src="/assets/claro.png" alt="Claro" width="36" height="36">
+        </div>
+      </header>
+      <main>
+        <section class="hero" aria-labelledby="pageTitle">
+          <div><div class="hero-overline" id="pageCategory">Visión de la operación</div><h1 id="pageTitle">Resumen ejecutivo</h1><p id="pageSubtitle">Inventario, demanda y decisiones de abastecimiento en un solo lugar.</p></div>
+          <button class="btn-primary hero-action" id="jumpImport"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M4 14v6h16v-6"/></svg>Toma física</button>
+        </section>
+        <div id="warning" class="warning" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3h.01"/></svg><div><strong>Verificando disponibilidad</strong><span>El estado de las fuentes aparecerá cuando responda el servidor.</span></div><button id="warningAction" class="btn-quiet">Ver fuentes</button></div>
+        <details class="filter-strip" id="globalFilters" open>
+          <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><strong>Filtros globales</strong><span id="filterSummary">Toda la operación</span><span class="filter-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></span></summary>
+          <div class="filter-controls"><label for="fFrom">Desde<input name="from" type="date" id="fFrom"></label><label for="fTo">Hasta<input name="to" type="date" id="fTo"></label><label for="fSku">Material<select name="sku" id="fSku"><option value="">Todos los materiales</option></select></label><label for="fTech">Técnico<select name="tech" id="fTech"><option value="">Todos los técnicos</option></select></label><label for="fCenter">Centro<select name="center" id="fCenter"><option value="">Todos</option></select></label><label for="fWarehouse">Almacén<select name="warehouse" id="fWarehouse"><option value="">Todos</option></select></label><label for="fTechnology">Tecnología<select name="technology" id="fTechnology"><option value="">Todas</option></select></label><button id="clearFilters" class="btn-quiet">Limpiar</button></div>
+        </details>
+        <div class="maincontent" id="content" tabindex="-1" aria-live="polite"><div class="loader"><span class="loading-ring" aria-hidden="true"></span>Verificando acceso y fuentes…</div></div>
+        <footer><span>GreenCall <span aria-hidden="true">/</span> Supply Chain & Inventory BI</span><span>Solo lectura de origen <span aria-hidden="true">·</span> Corte y cobertura visibles</span></footer>
+      </main>
+    </div>
+  </div>
+  <div class="modal" id="focusModal" role="dialog" aria-modal="true" aria-labelledby="focusTitle" hidden><div class="modal-card"><div class="modal-head"><h2 id="focusTitle">Gráfico ampliado</h2><button id="closeFocus" aria-label="Cerrar gráfico ampliado">✕</button></div><div id="focusChart"></div></div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

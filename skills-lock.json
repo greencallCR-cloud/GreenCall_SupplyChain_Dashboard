@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "skills": {
+    "deploy-to-vercel": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/deploy-to-vercel/SKILL.md",
+      "computedHash": "a024eac409b1bb2e072a19e7e0d7f194ac5482c87fb1a2ad6f62d041b454040c"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "913b9d37d0d54047dd65222bb8c67b2bf04e3cb87dcad1729068d7a8b2c8c396"
+    },
+    "gws-drive": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "skillPath": "skills/gws-drive/SKILL.md",
+      "computedHash": "d637ff849b82a9fc195bcfedea260cffe94eaa31b843b28cd04313b1720bb153"
+    },
+    "gws-script": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "skillPath": "skills/gws-script/SKILL.md",
+      "computedHash": "799025ea93e295538fdecdff445dc2c054c388e1ecaebafeb3195fb5607b2f97"
+    },
+    "gws-shared": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "skillPath": "skills/gws-shared/SKILL.md",
+      "computedHash": "b197590681ce3d5a52e9c15a68652b5445d111dbfc0dc453f68fb0785aac443c"
+    },
+    "gws-sheets": {
+      "source": "googleworkspace/cli",
+      "sourceType": "github",
+      "skillPath": "skills/gws-sheets/SKILL.md",
+      "computedHash": "21c951f8bf399bb941740ab8b048157b43088ad96b743976e88abb0046d263d2"
+    },
+    "neon": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neon/SKILL.md",
+      "computedHash": "65d4b559ff2ba49f9a725df55d343a1bfed8c0f365453e9957a6c994b486b200"
+    },
+    "neon-postgres": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neon-postgres/SKILL.md",
+      "computedHash": "4d4b3597581a024c7b114dcc2304e7d2bcd7b0a50aaecc91d184c34a6c66eea9"
+    },
+    "neon-postgres-branches": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neon-postgres-branches/SKILL.md",
+      "computedHash": "d6b7ecfc52508c57bd3c8572a7cd0c582c256e36731124eb8598e8b24780ab1d"
+    },
+    "polars": {
+      "source": "k-dense-ai/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/polars/SKILL.md",
+      "computedHash": "abe3762e45eefc706b5f969ae42d1dad9245428e77e863fba5a65f2889e6e01e"
+    },
+    "statsmodels": {
+      "source": "k-dense-ai/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/statsmodels/SKILL.md",
+      "computedHash": "90d8ce6e44f063f6f8ad6506b827f7ebb7a39955365603b96fbca47e1fcca5df"
+    },
+    "supabase-postgres-best-practices": {
+      "source": "supabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
+      "computedHash": "e14e276241805c97dbcfe40dcbea1a3035269cc7293cac4b1832dda41a835e60"
+    }
+  }
+}

@@ -30,3 +30,9 @@ Se autoriza introducir tecnologías, frameworks, servicios, componentes, librer�
 3. Conservar registros de pruebas y decisiones técnicas; no declarar trabajo hecho por una skill sin ejecutarla.
 4. El Install script y Start skill existentes en el entorno Codex Cloud se preservan; no reinstalar a ciegas ni duplicar scripts en el repositorio.
 5. Trabajar hasta completar subtareas verificables y escribir checkpoint antes de terminar la sesión.
+
+## Claude Code (2026-11-02)
+El equivalente verificado en Claude Code, con estado, fuentes y persistencia de cada skill, está en
+`docs/CLAUDE_CODE_ENTORNO_CHECKPOINT.md` y el mapa de uso en `CLAUDE.md`. Diferencias: `build-dashboard`,
+`analyze-data-quality` y `design-kpis` (OpenAI, licencia propietaria y dependientes de ChatGPT) no se instalan;
+`data-visualization` sí, como plugin local del proyecto.
