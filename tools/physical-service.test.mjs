@@ -41,7 +41,7 @@ function memoryStores(initial = seed()) {
   };
   const memoryLedger = {
     recordStatement: (batch, { baseSnapshotId, resultSnapshotId, actor }) => ({ text: '-- memory', values: [{ ...batch, base_snapshot_id: baseSnapshotId, result_snapshot_id: resultSnapshotId, actor, seq: ledger.length + 1, created_at: clock().toISOString() }] }),
-    getBatch: async id => ledger.find(b => b.id === id) || null,
+    getBatch: async id => { const b = ledger.find(x => x.id === id); return b ? { ...b, reverted_by: ledger.find(r => r.reverts_batch === id)?.id || null } : null; },
     activeImportBatches: async () => ledger.filter(b => b.action === 'IMPORT' && !ledger.some(r => r.reverts_batch === b.id)).map(b => ({ id: b.id, rows: b.rows })),
     listBatches: async () => [...ledger].reverse().map(({ rows, ...meta }) => ({ ...meta, reverted_by: ledger.find(r => r.reverts_batch === meta.id)?.id || null })),
   };
@@ -151,6 +151,10 @@ test('PostgreSQL ledger: atomic activation, idempotency, revert and append-only'
     // Reverting twice is blocked by the database itself, not only by the service.
     await assert.rejects(adapter.query(`INSERT INTO greencall_private.physical_import_batches (id, action, reverts_batch, base_snapshot_id, result_snapshot_id, rows, row_count, stats, actor)
       VALUES ('00000000-0000-4000-8000-0000000000aa', 'REVERT', $1, $2, $2, '[]', 0, '{}', 'admin_key')`, [applied.batch_id, competing.id]), /duplicate key|unique/i);
+    const again = await service.preview({ buffer, filename: 'toma.xlsx' });
+    const reapplied = await service.apply({ buffer, filename: 'toma.xlsx', expectedSha: again.file.sha256, baseSnapshotId: again.base_snapshot.id });
+    assert.equal(reapplied.idempotent, false);
+    assert.equal((await repository.loadSnapshot()).data.tables.physical_counts[0].import_batch, reapplied.batch_id);
     await assert.rejects(adapter.query('UPDATE greencall_private.physical_import_batches SET actor = $1', ['x']), /append-only/);
     await assert.rejects(adapter.query('DELETE FROM greencall_private.physical_import_batches', []), /append-only/);
     const grants = await adapter.query("SELECT count(*)::integer AS n FROM information_schema.role_table_grants WHERE table_schema = 'greencall_private' AND table_name = 'physical_import_batches' AND grantee = 'PUBLIC'", []);
@@ -170,4 +174,30 @@ test('reverting the only batch over legacy counts reactivates the exact original
   assert.equal(stores.state().snapshots.get(applied.snapshot_id).data.sources.physical_counts.source_tab, 'Toma histórica');
   const reverted = await service.revert({ batchId: applied.batch_id, baseSnapshotId: applied.snapshot_id });
   assert.equal(reverted.snapshot_id, original);
+});
+
+test('a reverted file can be imported again instead of reporting a false success', async () => {
+  const stores = memoryStores(), service = createPhysicalService({ ...stores, clock });
+  const buffer = file(line('K', 'TEST-M', 5));
+  const apply = async () => { const p = await service.preview({ buffer, filename: 'toma.xlsx' }); return service.apply({ buffer, filename: 'toma.xlsx', expectedSha: p.file.sha256, baseSnapshotId: p.base_snapshot.id }); };
+  const first = await apply();
+  await service.revert({ batchId: first.batch_id, baseSnapshotId: first.snapshot_id });
+  const again = await apply();
+  assert.equal(again.idempotent, false);
+  assert.notEqual(again.batch_id, first.batch_id);
+  assert.equal(stores.state().active, again.snapshot_id);
+  assert.deepEqual(stores.state().snapshots.get(again.snapshot_id).data.tables.physical_counts.map(r => r.count), [5]);
+});
+
+test('a ledger row that points at another snapshot is reported, not trusted', async () => {
+  const stores = memoryStores(), service = createPhysicalService({ ...stores, clock });
+  const buffer = file(line('K', 'TEST-M', 5));
+  const p = await service.preview({ buffer, filename: 'toma.xlsx' });
+  // Simulate a conflicting ledger row inserted by a concurrent writer with the same id.
+  const realGet = stores.ledger.getBatch;
+  let calls = 0;
+  stores.ledger.getBatch = async id => (++calls === 1 ? null : { id, action: 'IMPORT', result_snapshot_id: '00000000-0000-4000-8000-0000000000ee', reverted_by: null });
+  stores.repository.publishSnapshot = (orig => async (data, options) => { const r = await orig(data, { ...options, afterActivation: () => [] }); return { ...r, extra: [[]] }; })(stores.repository.publishSnapshot);
+  await assert.rejects(service.apply({ buffer, filename: 'toma.xlsx', expectedSha: p.file.sha256, baseSnapshotId: p.base_snapshot.id }), { code: 'LEDGER_WRITE_FAILED' });
+  stores.ledger.getBatch = realGet;
 });

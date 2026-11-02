@@ -78,3 +78,12 @@ test('admin role fails closed when the admin key is absent, short or equal to th
     if(value===key)assert.equal(auth.role(request('/x',{headers:{cookie}})),'viewer');
   }
 });
+test('rotating the admin key revokes existing admin sessions',async()=>{
+  const before=createCloudAuth({env:{...env,GREENCALL_ADMIN_KEY:'test-admin-key-only-2222222222222222222222222222'}});
+  const cookie=(await login(before,'test-admin-key-only-2222222222222222222222222222')).headers.get('set-cookie').split(';')[0];
+  const after=createCloudAuth({env:{...env,GREENCALL_ADMIN_KEY:'test-admin-key-rotated-3333333333333333333333333'}});
+  const r=request('/api/physical/apply',{method:'POST',headers:{cookie,origin:'https://preview.example'}});
+  assert.equal(before.role(r),'admin');
+  assert.equal(after.role(r),'viewer');
+  assert.equal(after.authorizeAdmin(r).status,403);
+});

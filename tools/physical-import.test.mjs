@@ -151,3 +151,20 @@ test('batch identities are deterministic for idempotent retries', () => {
   assert.notEqual(physicalBatchId('IMPORT', sha, null), physicalBatchId('IMPORT', sha, '00000000-0000-4000-8000-000000000001'));
   assert.match(physicalBatchId('REVERT', physicalBatchId('IMPORT', sha, null)), /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
 });
+
+test('decompression bombs are refused before exhausting memory', () => {
+  const padding = ' '.repeat(80 * 1024 * 1024);
+  const xml = `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${padding}</sheetData></worksheet>`;
+  const bomb = buildXlsx([{ name: 'Toma', xml }], { deflate: true });
+  assert.ok(bomb.length < PHYSICAL_LIMITS.maxBytes, 'the bomb fits under the upload limit');
+  const started = Date.now();
+  assert.throws(() => parsePhysicalFile(bomb, 'bomba.xlsx'), { code: 'FILE_TOO_LARGE' });
+  assert.ok(Date.now() - started < 3000, 'rejected quickly');
+});
+
+test('absurd column references cannot create giant sparse rows', () => {
+  const xml = `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="ZZZZZZ1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>`;
+  const started = Date.now();
+  assert.throws(() => parsePhysicalFile(buildXlsx([{ name: 'Toma', xml }]), 'columnas.xlsx'), { code: 'UNREADABLE_FILE' });
+  assert.ok(Date.now() - started < 1000);
+});
