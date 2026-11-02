@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { sanitizeSnapshot, snapshotHash, createSnapshotRepository, readPrivateSnapshot, writePrivateSnapshot, loadSnapshot, getSnapshotStatus } from '../lib/snapshot-store.mjs';
 import { createDashboardService } from '../lib/dashboard-service.mjs';
 
@@ -328,41 +327,17 @@ test('repository validates before SQL and status selects metadata without privat
 
 // Opt-in integration uses a disposable PostgreSQL 17 container started without
 // network access or exposed ports. No DATABASE_URL or remote credentials are read.
-const postgresContainer = process.env.GREENCALL_TEST_POSTGRES_CONTAINER;
-async function postgresCommand(container, database, script) {
-  return new Promise((resolve, reject) => {
-    const process = spawn('docker', ['exec', '-i', container, 'psql', '-w', '-U', 'postgres', '-d', database, '-X', '-qAt', '-v', 'ON_ERROR_STOP=1'], { stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '';
-    const timeout = setTimeout(() => { process.kill(); reject(new Error('Disposable PostgreSQL test timed out')); }, 15_000);
-    process.stdout.on('data', chunk => { stdout += chunk; });
-    process.stderr.on('data', chunk => { stderr += chunk; });
-    process.on('error', error => { clearTimeout(timeout); reject(error); });
-    process.on('close', code => { clearTimeout(timeout); code === 0 ? resolve(stdout) : reject(new Error('Disposable PostgreSQL rejected test SQL: ' + stderr)); });
-    process.stdin.end(script);
-  });
-}
-function postgresStatement(text, values = []) {
-  // Only synthetic test fixtures reach this disposable process. SQL values are
-  // quoted independently; no shell is involved and JSON is never shell-expanded.
-  const literal = value => value === null ? 'NULL' : typeof value === 'number' ? String(value) : "'" + String(value).replaceAll("'", "''") + "'";
-  let statement = text.replace(/\$(\d+)/g, (_, index) => literal(values[Number(index) - 1]));
-  if (/^\s*(?:INSERT|UPDATE|DELETE)\b/i.test(statement) && !/\bRETURNING\b/i.test(statement)) statement += ' RETURNING 1';
-  return `WITH test_result AS (${statement}) SELECT coalesce(json_agg(test_result), '[]'::json) FROM test_result;`;
-}
+import { postgresAvailable, postgresCommand as runPostgres, postgresAdapter } from './test-postgres.mjs';
 
-test('PostgreSQL 17 migration, staging, activation and append-only protection', { skip: !postgresContainer }, async () => {
-  assert.match(postgresContainer, /^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
+test('PostgreSQL migration, staging, activation and append-only protection', { skip: !postgresAvailable }, async () => {
   const database = 'greencall_test_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
-  await postgresCommand(postgresContainer, 'postgres', `CREATE DATABASE ${database};`);
+  await runPostgres('postgres', `CREATE DATABASE ${database};`);
   try {
     const migration = await fs.readFile(new URL('../db/migrations/20261031_001_snapshots.sql', import.meta.url), 'utf8');
-    await postgresCommand(postgresContainer, database, migration);
+    await runPostgres(database, migration);
     // Applying the additive migration again must preserve data and constraints.
-    await postgresCommand(postgresContainer, database, migration);
-    const adapter = {
-      query: async (text, values) => JSON.parse((await postgresCommand(postgresContainer, database, postgresStatement(text, values))).trim()),
-      transaction: async statements => (await postgresCommand(postgresContainer, database, 'BEGIN;\n' + statements.map(({ text, values }) => postgresStatement(text, values)).join('\n') + '\nCOMMIT;')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
-    };
+    await runPostgres(database, migration);
+    const adapter = postgresAdapter(database);
     const repository = createSnapshotRepository(adapter);
     assert.equal(await repository.loadSnapshot(), null);
     const first = await repository.publishSnapshot(fixture(), { capturedAt: retrieved });
@@ -421,7 +396,7 @@ test('PostgreSQL 17 migration, staging, activation and append-only protection', 
     await assert.rejects(adapter.query('DELETE FROM greencall_private.snapshot_chunks', []), /append-only/);
     const grants = await adapter.query("SELECT count(*)::integer AS count FROM information_schema.role_table_grants WHERE table_schema = 'greencall_private' AND grantee = 'PUBLIC'", []);
     assert.equal(grants[0].count, 0);
-  } finally { await postgresCommand(postgresContainer, 'postgres', `DROP DATABASE ${database} WITH (FORCE);`); }
+  } finally { await runPostgres('postgres', `DROP DATABASE ${database} WITH (FORCE);`); }
 });
 
 test('default store with no credentials performs no database access', async () => {
