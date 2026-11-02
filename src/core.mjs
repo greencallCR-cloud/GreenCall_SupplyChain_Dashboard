@@ -119,13 +119,21 @@ for(const r of filtered){
  if(q===null||q<0||(r.serial?q!==1:q>10000))c.invalid++;
  monthRows.set(key,c);
 }
+// Serialized equipment: one installed unit = one distinct serial. Serial-less rows of such SKUs carry
+// unverifiable bulk quantities (e.g. 10/15/30 per installation order) and are excluded, not imputed.
+const SERIALIZED_SHARE=0.8,serialMonthly=new Map(),serialStats=new Map();
+for(const r of filtered){const st=serialStats.get(r.sku)||{rows:0,serial:0,nonserial:0};st.rows++;if(r.serial){st.serial++;const m=serialMonthly.get(r.sku)||new Map(),k=String(r.date||'').slice(0,7),set=m.get(k)||new Set();set.add(String(r.serial).trim());m.set(k,set);serialMonthly.set(r.sku,m)}else st.nonserial++;serialStats.set(r.sku,st)}
+const isSerializedSku=sku=>{const st=serialStats.get(sku);return !!st&&st.rows>0&&st.serial/st.rows>=SERIALIZED_SHARE};
 for(const [key,c] of monthRows)if(c.invalid&&c.invalid/c.rows>INVALID_MONTH_SHARE){const [sku,month]=key.split('|');const invalid=invalidQuantityMonths.get(sku)||new Set();invalid.add(month);invalidQuantityMonths.set(sku,invalid)}
 const direct=Array.from(consSku.keys()).filter(sku=>!isPhysicalSupply(sku,skus.get(sku)?.description));
 for(const sku of direct){
  // Months before the SKU first appears in Consumos are pre-introduction, not zero demand.
  const first=periods.findIndex(m=>monthRows.has(sku+'|'+m)),range=first<0?periods:periods.slice(first);
- const vals=range.map(m=>invalidQuantityMonths.get(sku)?.has(m)?null:skuMonthly.get(sku)?.get(m)||0);
+ const serialized=isSerializedSku(sku);
+ const vals=serialized?range.map(m=>serialMonthly.get(sku)?.get(m)?.size||0):range.map(m=>invalidQuantityMonths.get(sku)?.has(m)?null:skuMonthly.get(sku)?.get(m)||0);
  const f=monthlyForecast(vals,range,consumptionCut);
+ f.series_basis=serialized?'SERIES DISTINTAS (equipo serializado)':'CANTIDAD CONSUMIDA';
+ f.nonserial_rows_excluded=serialized?serialStats.get(sku).nonserial:0;
  fcs.push({sku,description:skus.get(sku)?.description||sku,
   history:range.map((month,i)=>({month,units:vals[i],training:f.training_months.includes(month),excluded_rows:vals[i]===null?0:(monthRows.get(sku+'|'+month)?.invalid||0)})),
   ...f,cost:skus.get(sku)?.cost??null,source:'CONSUMO SISTÉMICO'});
