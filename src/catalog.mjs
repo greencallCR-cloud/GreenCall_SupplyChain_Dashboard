@@ -41,6 +41,15 @@ export function canonicalUnit(description, catalogUnit) {
   return unit ? { unit, source: 'CATÁLOGO' } : { unit: null, source: null };
 }
 
+// Reviewed description aliases (normalized key → catalog SKU). Only for movements WITHOUT a SKU
+// whose description is a verified misspelling/truncation of exactly one catalog item
+// (evidence: Despachos No Serializados, snapshot 2026-11-02). Add entries only with evidence.
+export const DESCRIPTION_ALIASES = Object.freeze({
+  'ARRA PLASTICAS NEGRAS 8 CPX': '1013950',            // AMARRA PLASTICAS NEGRAS 8" - CPX
+  'CONECTOR SIN HERRI 8802 T/1 6 3 SC/APC': '1005388', // CONECTOR SIN HERRAMI 8802-T/1.6-3 SC/APC
+  'CABLE UTP CAT5 P/INTERIORES 66445532': '1027925',   // CABLE UTP CAT5 P/INTERIORES 66445532AM
+});
+
 // Operational alias keys shared by catalog rows and movements without a SAP SKU.
 export function aliasKey(sku, description) {
   const x = clean(String(sku || '') + ' ' + String(description || ''));
@@ -71,7 +80,8 @@ export function createCatalogResolver(rows = [], { referenceCenter } = {}) {
   const label = x => [x.center || '—', x.warehouse || '—', x.lot || '—'].join('/');
 
   function unit(sku, description) {
-    const own = bySku.get(String(sku || '').trim()) || [];
+    const aliasSku = !String(sku || '').trim() ? DESCRIPTION_ALIASES[clean(description)] : null;
+    const own = bySku.get(aliasSku || String(sku || '').trim()) || [];
     const desc = description || own.find(x => x.description)?.description || '';
     const rule = canonicalUnit(String(sku || '').startsWith('PEND-') ? String(sku).replace(/-/g, ' ') + ' ' + desc : desc, '');
     if (rule.unit) return rule;
@@ -102,6 +112,8 @@ export function createCatalogResolver(rows = [], { referenceCenter } = {}) {
     const id = String(sku || '').trim();
     const own = id && !id.startsWith('PEND-') ? bySku.get(id) : null;
     if (own?.length) return bySkuCost(own, ctx);
+    const aliasSku = DESCRIPTION_ALIASES[clean(description)];
+    if (aliasSku && bySku.get(aliasSku)?.length) { const c = bySkuCost(bySku.get(aliasSku), ctx); return c.cost === null ? c : { ...c, basis: 'ALIAS', source: c.source + ' · alias revisado → SKU ' + aliasSku }; }
     // Placeholder or unknown SKU (e.g. 'SIN SKU', 'NO SAP'): exact description that maps to ONE catalog SKU.
     const twins = skuByDesc.get(clean(description));
     if (twins?.size === 1) { const via = [...twins][0], c = bySkuCost(bySku.get(via), ctx); return c.cost === null ? c : { ...c, basis: 'DESCRIPCIÓN', source: c.source + ' · vía descripción exacta → SKU ' + via }; }
