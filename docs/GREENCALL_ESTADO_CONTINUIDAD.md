@@ -176,7 +176,9 @@ Rama `claude/perf-forecast-costs` desde `main` `82630fb`. Mediciones con Neon re
 
 Neon: migración aditiva `20261103_001_snapshot_views.sql` aplicada (dry-run previo); `gc_dashboard_read` SELECT+INSERT sólo en esa tabla. Filas QA de medición eliminadas.
 Pruebas: `npm test` 145/0; PostgreSQL local para snapshot-store/physical-service/snapshot-views.
-Pendiente P5: validación autenticada de Production requiere una clave de QA de solo lectura configurada por el titular como secreto (Vercel + GitHub Actions), sin copiarla al chat.
+**Publicado (PR #6, `42bb96a`, ~07:03 UTC):** CI verde (Node 22/24, PostgreSQL con snapshot-views, estadística); Production sirve el build (`/api/status` 200, `/api/dashboard` 401 anónimo, 390 px sin overflow ni errores). Rollback: `82630fb`.
+Pendiente P5: validación autenticada de Production requiere una clave de QA de solo lectura configurada por el titular como secreto (Vercel + GitHub Actions), sin copiarla al chat. Mecanismo listo: workflow `production-smoke.yml` (tras cada deploy de Production o manual) con el secreto de repositorio `GREENCALL_SMOKE_ACCESS_KEY` = clave de LECTURA de Vercel; sin el secreto se omite. Validado localmente con el snapshot real: 28/28 gráficos visibles, 18 tablas, 0 errores JS, 0 overflow en 1440 y 390 px.
+Próximos pasos: (1) titular añade el secreto y se lee el primer resultado del smoke; (2) precalentar la vista por defecto tras cada sync/deploy para eliminar el primer cálculo de ~10 s; (3) precios faltantes en Catálogo SKUs (5 materiales) por el titular.
 
 ## Recuperación después de límite/cuota o nueva conversación
 1. Reabrir este repositorio/entorno Codex publicado.
