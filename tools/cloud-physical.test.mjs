@@ -21,15 +21,16 @@ function fakeService(calls) {
 }
 const upload = (c, path = '/api/physical/preview', headers = {}, body = Buffer.from('PK-synthetic')) => req(path, { method: 'POST', headers: { cookie: c, origin, 'content-type': 'application/octet-stream', 'x-file-name': encodeURIComponent('Toma Octubre.xlsx'), ...headers }, body });
 
-test('physical routes require admin for writes, any session for history', async () => {
+test('physical routes (writes and history) require the admin session', async () => {
   const calls = [], api = createCloudApi({ env, getPhysicalService: async () => fakeService(calls) });
   for (const path of ['/api/physical/preview', '/api/physical/apply', '/api/physical/revert']) assert.equal((await api(req(path, { method: 'POST', headers: { origin } }))).status, 401);
   assert.equal((await api(req('/api/physical/batches'))).status, 401);
-  const viewer = await cookie(api, env.GREENCALL_ACCESS_KEY);
-  assert.equal((await api(upload(viewer))).status, 403);
-  assert.equal((await api(req('/api/physical/batches', { headers: { cookie: viewer } }))).status, 200);
-  assert.deepEqual(calls, [['history']]);
+  const loginAccess = await api(req('/api/login', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ token: env.GREENCALL_ACCESS_KEY }) }));
+  assert.equal(loginAccess.status, 401, 'the old reader key opens nothing');
+  assert.deepEqual(calls, []);
   const admin = await cookie(api, env.GREENCALL_ADMIN_KEY);
+  assert.equal((await api(req('/api/physical/batches', { headers: { cookie: admin } }))).status, 200);
+  assert.deepEqual(calls, [['history']]);
   const preview = await api(upload(admin));
   assert.equal(preview.status, 200);
   assert.deepEqual(calls.at(-1), ['preview', 'Toma Octubre.xlsx', 12]);

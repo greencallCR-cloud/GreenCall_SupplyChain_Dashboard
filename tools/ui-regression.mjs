@@ -136,12 +136,13 @@ async function regression(){
   async function start(mode){
     // Do not inherit runtime database, Google, access keys, or other configured secrets.
     const env={PATH:process.env.PATH,HOME:process.env.HOME,PORT:'0'};
-    if(mode!=='unconfigured')Object.assign(env,{GREENCALL_ACCESS_KEY:token,GREENCALL_SESSION_SECRET:secret});
+    if(mode!=='unconfigured')Object.assign(env,{GREENCALL_ADMIN_KEY:token,GREENCALL_SESSION_SECRET:secret});
     if(['populated','empty'].includes(mode))env.QA_UI_SCENARIO=mode;
     const child=spawn(process.execPath,['populated','empty'].includes(mode)?[fileURLToPath(import.meta.url),'--fixture']:['tools/cloud-dev.mjs'],{cwd:root,env,stdio:['ignore','pipe','pipe']});children.push(child);
     return new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('QA harness did not start')),15000);child.stdout.on('data',chunk=>{output+=chunk;const found=output.match(/http:\/\/127\.0\.0\.1:\d+/);if(found){clearTimeout(timer);resolve(found[0])}});child.on('exit',()=>{clearTimeout(timer);reject(Error('QA harness exited'))});child.on('error',()=>{clearTimeout(timer);reject(Error('QA harness unavailable'))})});
   }
-  function open(origin,login=false){ab('open',origin+'/#overview');ab('wait','--fn','!document.querySelector("#content .loader")');if(login&&ev('!!document.getElementById("accessToken")')){ab('fill','#accessToken',token);ab('click','#accessSubmit');ab('wait','--fn','!document.getElementById("accessToken")&&!document.querySelector("#content .loader")')}}
+  // Public consultation needs no key; login=true enters admin mode through the Administrador button.
+  function open(origin,login=false){ab('open',origin+'/#overview');ab('wait','--fn','!document.querySelector("#content .loader")');if(login&&ev('document.getElementById("adminButton").getAttribute("aria-pressed")!=="true"')){ab('click','#adminButton');ab('fill','#adminToken',token);ab('click','#adminSubmit');ab('wait','--fn','!!document.querySelector("#nav [data-page=physical]")&&!document.querySelector("#content .loader")')}}
   function goto(page){ev(`document.querySelector('#nav a[data-page="${page}"]').click()`);ab('wait','--fn','!document.querySelector("#content .loader")&&[...document.querySelectorAll("#content .plot")].every(el=>el.querySelector(".empty-state")||(el.querySelector(".main-svg")?.getBoundingClientRect().width>120&&el.querySelector(".main-svg")?.getBoundingClientRect().height>120))')}
   const viewports=[[1920,1080],[1366,768],[768,1024],[390,844],[360,800]];
   const pages=['overview','inventory','consumptions','dispatch','rotation','policy','abc','forecast','planning','charges','workshop','technicians','physical','quality','admin'];
@@ -155,7 +156,7 @@ async function regression(){
       ab('errors','--clear');ab('console','--clear');
       for(const [w,h]of viewports){
         ab('set','viewport',String(w),String(h));
-        for(const page of pages){
+        for(const page of phase==='unconfigured'?pages.filter(p=>!['physical','quality','admin'].includes(p)):pages){
           const row=ev(`(async()=>{
             document.querySelector('#nav a[data-page="${page}"]').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
             const start=performance.now();
@@ -170,17 +171,18 @@ async function regression(){
       const errors=ab('errors').errors;report.browserErrors.push({phase,errors});report.console.push({phase,messages:ab('console').messages});if(errors.length)throw Error('Unexpected JavaScript error');await save();
       console.log(`${phase}: 75 routes, 16 axe audits passed`);
     }
-    ab('set','media','light','reduced-motion');ab('set','viewport','390','844');ab('cookies','clear');open(realAuth);ab('wait','--text','Acceda a su operación');audit('flow','login',[390,844]);
-    ab('fill','#accessToken','QA_INTENTIONALLY_WRONG');ab('click','#accessSubmit');ab('wait','--text','La clave no es válida');
-    verify('invalid login focuses field',ev('({pass:document.activeElement.id==="accessToken"&&document.getElementById("accessToken").getAttribute("aria-invalid")==="true"&&!document.getElementById("accessSubmit").disabled})'));audit('flow','invalid login',[390,844]);
-    ab('fill','#accessToken',token);ab('click','#accessSubmit');ab('wait','--text','Aún no hay datos disponibles');
-    verify('actual Cloud harness authenticated without source',ev('(async()=>{const s=await fetch("/api/status").then(r=>r.json());return {pass:s.authenticated&&s.data.state==="not_configured"&&!document.querySelector(".kpi"),data:s.data.state}})()'));
-    ab('click','#stateLogout');ab('wait','--text','Acceda a su operación');verify('logout rejects dashboard',ev('(async()=>({pass:(await fetch("/api/dashboard")).status===401&&!document.querySelector(".kpi")}))()'));
+    ab('set','media','light','reduced-motion');ab('set','viewport','390','844');ab('cookies','clear');open(realAuth);ab('wait','--text','Aún no hay datos disponibles');
+    verify('public mode hides admin tabs and never asks for a key',ev('({pass:!document.getElementById("accessToken")&&!["physical","quality","admin"].some(p=>document.querySelector(`#nav [data-page=${p}]`))})'));audit('flow','public without source',[390,844]);
+    ab('click','#adminButton');ab('fill','#adminToken','QA_INTENTIONALLY_WRONG');ab('click','#adminSubmit');ab('wait','--text','La clave administrativa no es válida');
+    verify('invalid admin key focuses field',ev('({pass:document.activeElement.id==="adminToken"&&document.getElementById("adminToken").getAttribute("aria-invalid")==="true"&&!document.getElementById("adminSubmit").disabled})'));audit('flow','invalid admin key',[390,844]);
+    ab('fill','#adminToken',token);ab('click','#adminSubmit');ab('wait','--fn','!!document.querySelector("#nav [data-page=physical]")');
+    verify('actual Cloud harness admin without source',ev('(async()=>{const s=await fetch("/api/status").then(r=>r.json());return {pass:s.access.role==="admin"&&s.data.state!=="ready"&&!document.querySelector(".kpi"),data:s.data.state}})()'));
+    ab('click','#adminButton');ab('wait','--fn','!document.querySelector("#nav [data-page=physical]")');verify('leaving admin closes private APIs',ev('(async()=>({pass:(await fetch("/api/rows")).status===401&&!document.querySelector("#nav [data-page=quality]")}))()'));
     open(pending);abortStatus();ab('click','#retryData');ab('wait','--text','No se pudo leer la operación');
     verify('network error disables data controls',ev('({pass:!document.querySelector(".kpi")&&[...document.querySelectorAll("#globalFilters input,#globalFilters select,#globalFilters button")].every(el=>el.disabled)})'));audit('flow','network error',[390,844]);
-    restoreStatus();ab('click','#retryData');ab('wait','--text','Prepare un acceso seguro');verify('network retry recovers',{pass:true});
+    restoreStatus();ab('click','#retryData');ab('wait','--text','Aún no hay datos disponibles');verify('network retry recovers',{pass:true});
     ab('click','#menuToggle');verify('mobile drawer inerts workspace',ev('({pass:document.querySelector(".workspace").inert&&!document.getElementById("sidebar").inert})'));
-    ab('focus','#nav a[data-page="admin"]');ab('press','Tab');verify('mobile drawer focus loop',ev('({pass:document.activeElement.classList.contains("side-brand")})'));
+    ab('focus','#nav a[data-page="technicians"]');ab('press','Tab');verify('mobile drawer focus loop',ev('({pass:document.activeElement.classList.contains("side-brand")})'));
     ab('press','Escape');verify('mobile drawer Escape returns focus',ev('({pass:document.activeElement.id==="menuToggle"&&!document.querySelector(".workspace").inert&&document.getElementById("sidebar").inert})'));
     ab('click','#menuToggle');ab('wait','--fn','document.querySelector("#nav a[data-page=inventory]").getBoundingClientRect().left>=0');ab('click','#nav a[data-page="inventory"]');verify('mobile navigation closes drawer',ev('({pass:location.hash==="#inventory"&&!document.body.classList.contains("drawer-open")&&!document.querySelector(".workspace").inert})'));
     ab('set','viewport','1366','768');open(populated,true);ab('wait','--fn','!!document.querySelector("#ov1 .main-svg")');
@@ -200,8 +202,8 @@ async function regression(){
     const urlBefore=ev('location.href');ab('fill','#dataSearch','QA_FORCE_EXPORT_LIMIT');scroll('#dataSearchBtn');ab('click','#dataSearchBtn');scroll('#rowCsv');ab('click','#rowCsv');ab('wait','--text','La exportación excede el límite');verify('CSV 413 stays in workspace',ev(`({pass:location.href===${JSON.stringify(urlBefore)}&&document.getElementById('toast').innerText.includes('límite'),message:document.getElementById('toast').innerText})`));
     // Delay only delivery of a real export response to exercise logout cancellation.
     goto('abc');ev('window.__qaExportDone=false;window.__qaOriginalFetch=fetch;window.fetch=async(...args)=>{const r=await window.__qaOriginalFetch(...args);if(String(args[0]).startsWith("/api/exports?")){await new Promise(done=>setTimeout(done,500));window.__qaExportDone=true}return r}');
-    const before=(await fs.readdir(artifactDir)).filter(f=>f.endsWith('.csv')).length;scroll('[data-export="abc"]');ab('click','[data-export="abc"]');ab('click','#sessionLogout');ab('wait','--text','Acceda a su operación');ab('wait','--fn','window.__qaExportDone');ev('window.fetch=window.__qaOriginalFetch');
-    const after=(await fs.readdir(artifactDir)).filter(f=>f.endsWith('.csv')).length;verify('logout discards pending export',{pass:before===after&&!ev('!!document.querySelector(".kpi")')});
+    const before=(await fs.readdir(artifactDir)).filter(f=>f.endsWith('.csv')).length;scroll('[data-export="abc"]');ab('click','[data-export="abc"]');ab('click','#adminButton');ab('wait','--fn','!document.querySelector("#nav [data-page=physical]")');ab('wait','--fn','window.__qaExportDone');ev('window.fetch=window.__qaOriginalFetch');
+    const after=(await fs.readdir(artifactDir)).filter(f=>f.endsWith('.csv')).length;verify('leaving admin discards pending export',{pass:before===after});
     report.success=true;await save();console.log(`${report.routes.length} routes, ${report.a11y.length} axe audits, ${report.flows.length} flows passed. Synthetic artifacts: ${artifactDir}`);
   }catch(error){try{report.failureState=ev('({url:location.origin+location.pathname+location.search+location.hash,title:document.querySelector("h1")?.textContent,heading:document.querySelector("#content h2")?.textContent,toast:document.getElementById("toast")?.innerText,exportMeta:window.__qaExportMeta,loader:!!document.querySelector("#content .loader"),login:!!document.getElementById("accessToken"),content:document.getElementById("content")?.innerText.slice(0,1000),plots:[...document.querySelectorAll(".plot")].map(el=>el.id)})')}catch{}report.success=false;report.failure=error.message;await save();console.error(`UI regression failed: ${error.message}. Report: ${path.join(artifactDir,'results.json')}`);process.exitCode=1}
   finally{try{ab('network','unroute');ab('close')}catch{}for(const child of children)child.kill('SIGTERM')}

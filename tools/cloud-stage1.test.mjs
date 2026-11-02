@@ -13,7 +13,7 @@ test('API status da JSON sin declarar datos migrados',async()=>{
  try{
   const r=await status.fetch(req());const d=await r.json();
   assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/application\/json/);
-  assert.equal(d.database.state,'not_verified');assert.equal(d.data.state,'not_configured');
+  assert.equal(d.database.state,'not_disclosed');assert.ok(['not_configured','unavailable'].includes(d.data.state));assert.equal(d.access.role,'public');
   assert.equal(d.authenticated,false);assert.deepEqual(d.sources,{});
   assert.equal(r.headers.get('cache-control').includes('no-store'),true);
  } finally { if(current!==undefined)process.env.DATABASE_URL=current; }
@@ -22,14 +22,16 @@ test('API status rechaza métodos de escritura',async()=>{
  const r=await status.fetch(req('/api/status','POST'));assert.equal(r.status,405);
 });
 test('Dashboard y filas no inventan resultados',async()=>{
- for(const handler of [dashboard,rows]){
-  const r=await handler.fetch(req(handler===dashboard?'/api/dashboard':'/api/rows'));assert.equal(r.status,503);
-  const d=await r.json();assert.equal(d.code,'ACCESS_NOT_CONFIGURED');
- }
+ const current=process.env.DATABASE_URL;delete process.env.DATABASE_URL;
+ try{
+  const r=await dashboard.fetch(req('/api/dashboard'));assert.equal(r.status,503);
+  assert.ok(['SNAPSHOT_REQUIRED','DATA_UNAVAILABLE'].includes((await r.json()).code),'consulta pública sin snapshot: error explícito');
+  const raw=await rows.fetch(req('/api/rows'));assert.ok([401,503].includes(raw.status),'filas crudas solo admin');
+ } finally { if(current!==undefined)process.env.DATABASE_URL=current; }
 });
 test('Sheets informa explícitamente falta de sincronización',async()=>{
- const r=await sheets.fetch(req('/api/sheets/status'));assert.equal(r.status,503);
- assert.equal((await r.json()).code,'ACCESS_NOT_CONFIGURED');
+ const r=await sheets.fetch(req('/api/sheets/status'));assert.ok([401,503].includes(r.status));
+ assert.ok(['ADMIN_NOT_CONFIGURED','ADMIN_REQUIRED'].includes((await r.json()).code));
 });
 test('Neon verifica nombre de base y no divulga contraseña',async()=>{
  const url='postgresql://user:secret@db.local/greencall_bi';

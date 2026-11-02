@@ -57,26 +57,66 @@ test('rejects unsupported, oversized and non-physical workbooks explicitly', () 
   assert.ok(!/[\/<>]/.test(unsafe.filename));
 });
 
-test('row validation blocks invalid counts and names every problem by row and field', () => {
+test('row errors are isolated by row and field; blanks, ANNULLED and the excluded SIM are informative', () => {
   const parsed = parsePhysicalFile(book(
     row({ date: '' }),                                  // 2 missing date
     row({ date: '2026-02-30' }),                        // 3 invalid date
     row({ date: '2026-12-01' }),                        // 4 future date
     row({ tech: '', tech_name: '' }),                   // 5 missing technician
     row({ sku: '' }),                                   // 6 missing SKU
-    row({ count: '' }),                                 // 7 missing count
+    row({ count: '' }),                                 // 7 blank count = NOT MEASURED (informative)
     row({ count: -2 }),                                 // 8 negative
     row({ sku: 'TEST-P', count: 2.5 }),                 // 9 fractional pieces
-    row({ sku: '7005189' }),                            // 10 excluded SKU
+    row({ sku: '7005189' }),                            // 10 excluded SKU (policy, informative)
     row({ take: 'DUP', count: 1 }), row({ take: 'DUP', count: 2 }), // 11-12 conflicting duplicate
+    row({ status: 'ANNULLED', count: 4 }),              // 13 annulled form (informative, never a count)
   ), 'errores.xlsx');
   const { preview, next } = planPhysicalImport({ data: base(), parsed, batches: [], batchId: physicalBatchId('IMPORT', parsed.sha256, null), today, now: '2026-10-31T18:00:00.000Z' });
-  assert.equal(next, null);
-  assert.equal(preview.can_apply, false);
+  assert.equal(next, null, 'no valid observation left');
+  assert.equal(preview.can_apply, false); assert.equal(preview.blocked_reason, 'VALIDATION_FAILED');
   const errors = preview.issues.filter(i => i.severity === 'error').map(i => [i.row, i.code]);
-  for (const expected of [[2, 'MISSING_DATE'], [3, 'INVALID_DATE'], [4, 'FUTURE_DATE'], [5, 'MISSING_TECH'], [6, 'MISSING_SKU'], [7, 'MISSING_COUNT'], [8, 'NEGATIVE_COUNT'], [9, 'FRACTIONAL_PIECES'], [10, 'EXCLUDED_SKU'], [12, 'CONFLICTING_DUPLICATE']])
+  for (const expected of [[2, 'MISSING_DATE'], [3, 'INVALID_DATE'], [4, 'FUTURE_DATE'], [5, 'MISSING_TECH'], [6, 'MISSING_SKU'], [8, 'NEGATIVE_COUNT'], [9, 'FRACTIONAL_PIECES'], [12, 'CONFLICTING_DUPLICATE']])
     assert.ok(errors.some(([r, c]) => r === expected[0] && c === expected[1]), 'expected ' + expected.join(':'));
+  assert.ok(!errors.some(([r]) => [7, 10, 13].includes(r)), 'informative rows are not errors');
+  assert.deepEqual(preview.stats.ignored, { not_measured: 1, annulled: 1, excluded_policy: 1, total: 3 });
   assert.ok(preview.issues.every(i => typeof i.message === 'string' && i.sheet === 'Toma física'));
+});
+
+test('partial safe import: valid observations apply even when other rows are rejected', () => {
+  const parsed = parsePhysicalFile(book(row({ count: 3 }), row({ count: -1, take: 'BAD' }), row({ count: '' , take: 'BLANK' })), 'parcial.xlsx');
+  const { preview, next, batch } = planPhysicalImport({ data: base(), parsed, batches: [], batchId: physicalBatchId('IMPORT', parsed.sha256, null), today, now: '2026-10-31T18:00:00.000Z' });
+  assert.equal(preview.can_apply, true); assert.equal(preview.partial, true);
+  assert.equal(preview.stats.valid, 1); assert.equal(preview.stats.rejected, 1); assert.equal(preview.stats.ignored.not_measured, 1);
+  assert.equal(batch.rows.length, 1); assert.equal(next.tables.physical_counts[0].count, 3);
+});
+
+// Synthetic fixture with the REAL autoconteo export structure (15 columns incl. Responsable,
+// Excel serial dates, EXPIRED/ANNULLED form states). No operational values.
+const AUTO_HEADER = ['Toma', 'Tipo', 'Estado', 'Fecha', 'Vence', 'Técnico', 'Código técnico', 'Responsable', 'SKU', 'Descripción', 'Serializado', 'Conteo físico', 'Referencia ETA', 'Diferencia', 'Resultado'];
+const serial = iso => Math.round(Date.parse(iso + 'T00:00:00Z') / 86400000) + 25569;
+const auto = o => [o.take, 'Autoconteo', o.status, serial(o.date), serial(o.date) + 3, 'Synthetic Tech', o.tech, 'Synthetic Supervisor', o.sku, o.desc || 'Synthetic', 'No', o.count ?? '', '', '', ''];
+test('autoconteo export: EXPIRED with a count is valid, 0 is valid, blanks are not measured, latest count wins', () => {
+  const parsed = parsePhysicalFile(buildXlsx([{ name: 'Tomas de inventario', rows: [AUTO_HEADER,
+    auto({ take: 'A1', status: 'EXPIRED', date: '2026-09-14', tech: 'TEST-T1', sku: 'TEST-P', count: 9 }),
+    auto({ take: 'A2', status: 'EXPIRED', date: '2026-10-01', tech: 'TEST-T1', sku: 'TEST-P', count: 4 }),
+    auto({ take: 'A3', status: 'EXPIRED', date: '2026-10-20', tech: 'TEST-T1', sku: 'TEST-P', count: 0 }),
+    auto({ take: 'A4', status: 'EXPIRED', date: '2026-10-29', tech: 'TEST-T1', sku: 'TEST-P' }),            // unanswered form, later date
+    auto({ take: 'A5', status: 'ANNULLED', date: '2026-10-25', tech: 'TEST-T1', sku: 'TEST-P' }),
+    auto({ take: 'A6', status: 'EXPIRED', date: '2026-10-20', tech: 'TEST-T2', sku: 'TENSORES', desc: 'TENSOR', count: 120 }),
+    auto({ take: 'A7', status: 'EXPIRED', date: '2026-10-20', tech: 'TEST-T2', sku: 'PEND-UTP-EXTERIOR', desc: 'UTP PARA EXTERIORES', count: 35.5 }),
+  ] }]), 'tomas_autoconteo.xlsx');
+  assert.equal(parsed.rows.length, 7);
+  assert.ok(!('responsible' in parsed.rows[0]) && !Object.values(parsed.rows[0]).includes('Synthetic Supervisor'), 'Responsable is not stored');
+  const { preview, next } = planPhysicalImport({ data: base(), parsed, batches: [], batchId: physicalBatchId('IMPORT', parsed.sha256, null), today, now: '2026-10-31T18:00:00.000Z' });
+  assert.equal(preview.can_apply, true);
+  assert.equal(preview.stats.with_count, 5); assert.equal(preview.stats.valid, 5);
+  assert.deepEqual(preview.stats.ignored, { not_measured: 1, annulled: 1, excluded_policy: 0, total: 2 });
+  assert.equal(preview.stats.date_max, '2026-10-20'); assert.equal(preview.stats.pairs, 3); assert.equal(preview.stats.pairs_multiple, 1);
+  const units = Object.fromEntries(preview.changes.map(c => [c.sku, c.unit]));
+  assert.deepEqual(units, { 'TEST-P': 'PZA', TENSORES: 'PZA', 'PEND-UTP-EXTERIOR': 'M' }, 'units from the resolver, never SIN UNIDAD');
+  assert.equal(next.tables.physical_counts.length, 5, 'history is append-only: every dated count is kept');
+  const latest = analyze(sanitizeSnapshot(next), {}, {}).physical.latest.find(r => r.tech === 'TEST-T1' && r.sku === 'TEST-P');
+  assert.equal(latest.count, 0, 'explicit 0 on the latest measured date wins; the unanswered later form does not');
 });
 
 test('warnings keep rows importable but visible', () => {

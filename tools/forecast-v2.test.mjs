@@ -22,7 +22,7 @@ test('a historical daily cutoff excludes that partial month even when future sou
 test('dispatch proxy respects the date and technician filter and has its own partial cutoff', () => {
   const data = source();
   data.tables.dispatch_nonserial = [
-    {sku:'PEND-TENSORES',description:'Tensores',date:'2024-01-31',quantity:10,tech:'TEST'},
+    {sku:'PEND-TENSORES',description:'Tensores',date:'2024-01-01',quantity:10,tech:'TEST'},
     {sku:'PEND-TENSORES',description:'Tensores',date:'2024-02-10',quantity:20,tech:'TEST'},
     {sku:'PEND-TENSORES',description:'Tensores',date:'2024-12-31',quantity:999,tech:'OTHER'},
   ];

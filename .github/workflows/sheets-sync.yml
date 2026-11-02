@@ -69,3 +69,8 @@ jobs:
           fi
           rm -rf "$PRIVATE"
           exit "$status"
+      - name: Precompute the default view of the new snapshot (public endpoint, timings only)
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GREENCALL_WARM_URL: https://greencall-supplychain-dashboard.vercel.app
+        run: node tools/warm-views.mjs
