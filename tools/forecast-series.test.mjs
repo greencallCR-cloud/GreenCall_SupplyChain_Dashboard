@@ -43,3 +43,17 @@ test('forecast list leads with the most active systemic material', () => {
   const f = analyze(data(), {}, {}).forecasts;
   assert.equal(f[0].sku, '9200002', '1080 orders before the 30-order legacy SKU');
 });
+
+test('serialized equipment demand = distinct serials per month; bulk serial-less quantities are excluded and reported', () => {
+  const rows = []; let n = 2;
+  for (let i = 0; i < 14; i++) {
+    const m = `2025-${String((i % 12) + 1).padStart(2, '0')}`, y = i < 12 ? '2025' : '2026', month = `${y}-${String((i % 12) + 1).padStart(2, '0')}`;
+    for (let k = 0; k < 20; k++) rows.push({ order: `E-${i}-${k}`, sku: '9400001', serial: `SER-${i}-${k}`, quantity: 1, date: month + '-10', tech: 'T', source_mode: 'GOOGLE_CONSUMOS', _sheet_row: n++ });
+    if (i === 6) rows.push({ order: `E-${i}-bulk`, sku: '9400001', quantity: 30, date: month + '-11', tech: 'T', source_mode: 'GOOGLE_CONSUMOS', _sheet_row: n++ });
+  }
+  const d = { tables: { google_consumos: rows, sku_catalog: [{ sku: '9400001', description: 'EQUIPO SERIALIZADO SINTETICO', unit: 'PZA', cost: 1000, center: 'C1', warehouse: 'A000', lot: 'VALORADO' }] }, sources: {} };
+  const f = analyze(d, {}, {}).forecasts.find(x => x.sku === '9400001');
+  assert.ok(f.history.every(h => h.units === 20), 'each month = 20 distinct serials; the bulk 30 is not added');
+  assert.match(f.series_basis, /SERIES/);
+  assert.equal(f.nonserial_rows_excluded, 1);
+});
