@@ -123,7 +123,17 @@ for(const r of filtered){
 // unverifiable bulk quantities (e.g. 10/15/30 per installation order) and are excluded, not imputed.
 const SERIALIZED_SHARE=0.8,serialMonthly=new Map(),serialStats=new Map();
 for(const r of filtered){const st=serialStats.get(r.sku)||{rows:0,serial:0,nonserial:0};st.rows++;if(r.serial){st.serial++;const m=serialMonthly.get(r.sku)||new Map(),k=String(r.date||'').slice(0,7),set=m.get(k)||new Set();set.add(String(r.serial).trim());m.set(k,set);serialMonthly.set(r.sku,m)}else st.nonserial++;serialStats.set(r.sku,st)}
-const isSerializedSku=sku=>{const st=serialStats.get(sku);return !!st&&st.rows>0&&st.serial/st.rows>=SERIALIZED_SHARE};
+// Precedence: explicit sources first (Series SAP, catalog type TE02 = equipos; TE04 = materiales never),
+// the consumption share (>=80 % rows with serial) only as a labelled fallback.
+const sapSerialSkus=new Set(get('sap_serials').map(r=>r.sku).filter(Boolean)),catalogType=new Map();
+for(const r of get('sku_catalog'))if(r.sku&&r.material_type&&!catalogType.has(r.sku))catalogType.set(r.sku,String(r.material_type).toUpperCase().trim());
+const serializedBasis=sku=>{const type=catalogType.get(sku),st=serialStats.get(sku),share=st&&st.rows?st.serial/st.rows:0;
+ if(type==='TE04')return null;
+ if(sapSerialSkus.has(sku)&&share>0)return 'SERIES SAP';
+ if(type==='TE02'&&share>0)return 'CATÁLOGO TE02 (equipos)';
+ if(share>=SERIALIZED_SHARE)return 'EVIDENCIA DE CONSUMOS ('+Math.round(share*100)+' % filas con serie)';
+ return null};
+const isSerializedSku=sku=>Boolean(serializedBasis(sku));
 for(const [key,c] of monthRows)if(c.invalid&&c.invalid/c.rows>INVALID_MONTH_SHARE){const [sku,month]=key.split('|');const invalid=invalidQuantityMonths.get(sku)||new Set();invalid.add(month);invalidQuantityMonths.set(sku,invalid)}
 const direct=Array.from(consSku.keys()).filter(sku=>!isPhysicalSupply(sku,skus.get(sku)?.description));
 for(const sku of direct){
@@ -134,6 +144,7 @@ for(const sku of direct){
  const f=monthlyForecast(vals,range,consumptionCut);
  f.series_basis=serialized?'SERIES DISTINTAS (equipo serializado)':'CANTIDAD CONSUMIDA';
  f.nonserial_rows_excluded=serialized?serialStats.get(sku).nonserial:0;
+ f.serialized_basis=serialized?serializedBasis(sku):null;
  fcs.push({sku,description:skus.get(sku)?.description||sku,
   history:range.map((month,i)=>({month,units:vals[i],training:f.training_months.includes(month),excluded_rows:vals[i]===null?0:(monthRows.get(sku+'|'+month)?.invalid||0)})),
   ...f,cost:skus.get(sku)?.cost??null,source:'CONSUMO SISTÉMICO'});

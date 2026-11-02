@@ -57,3 +57,22 @@ test('serialized equipment demand = distinct serials per month; bulk serial-less
   assert.match(f.series_basis, /SERIES/);
   assert.equal(f.nonserial_rows_excluded, 1);
 });
+
+test('serialized classification: explicit sources (Series SAP, catalog type) win over the 80 % share', () => {
+  const rows = []; let n = 2;
+  const add = (sku, i, serialEvery) => { for (let k = 0; k < 10; k++) rows.push({ order: `${sku}-${i}-${k}`, sku, serial: k % serialEvery === 0 ? `${sku}-S-${i}-${k}` : '', quantity: 1, date: `2025-${String(i + 1).padStart(2, '0')}-10`, tech: 'T', source_mode: 'GOOGLE_CONSUMOS', _sheet_row: n++ }); };
+  for (let i = 0; i < 12; i++) { add('9500001', i, 1); add('9500002', i, 2); add('9500003', i, 2); add('9500004', i, 1); }
+  const catalog = [
+    { sku: '9500001', description: 'MATERIAL TE04 CON SERIES', unit: 'PZA', cost: 1, material_type: 'TE04', center: 'C1', warehouse: 'A000', lot: 'VALORADO' },
+    { sku: '9500002', description: 'EQUIPO TE02', unit: 'PZA', cost: 1, material_type: 'TE02', center: 'C1', warehouse: 'A000', lot: 'VALORADO' },
+    { sku: '9500003', description: 'ACCESORIO EN SERIES SAP', unit: 'PZA', cost: 1, material_type: 'TE08', center: 'C1', warehouse: 'A000', lot: 'VALORADO' },
+    { sku: '9500004', description: 'SIN TIPO', unit: 'PZA', cost: 1, center: 'C1', warehouse: 'A000', lot: 'VALORADO' },
+  ];
+  const d = { tables: { google_consumos: rows, sku_catalog: catalog, sap_serials: [{ sku: '9500003', serial: 'X', cut: '2025-12-31' }] }, sources: {} };
+  const by = sku => analyze(d, {}, {}).forecasts.find(f => f.sku === sku);
+  assert.equal(by('9500001').series_basis, 'CANTIDAD CONSUMIDA', 'TE04 materials are never treated as serialized equipment');
+  assert.match(by('9500002').serialized_basis, /CATÁLOGO TE02/);
+  assert.match(by('9500003').serialized_basis, /SERIES SAP/);
+  assert.match(by('9500004').serialized_basis, /EVIDENCIA/);
+  assert.equal(by('9500002').history[0].units, 5, 'distinct serials only (5 of 10 rows carry a serial)');
+});
