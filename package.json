@@ -20,5 +20,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "axe-core": "4.10.3"
+  }
 }

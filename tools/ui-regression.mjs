@@ -3,6 +3,7 @@
 // Reuses the recovered work/greencall-synthetic-ui.mjs fixture and route checks.
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes} from 'node:crypto';
@@ -79,14 +80,59 @@ async function regression(){
   const session=`greencall-ui-regression-${process.pid}`;
   const report={timestamp:new Date().toISOString(),source:'Loopback only; all populated records are synthetic. No Google connection or operational validation.',routes:[],a11y:[],flows:[],initialStates:[],console:[],browserErrors:[],limitations:['axe cannot resolve every Plotly SVG contrast check','No private snapshot, Neon runtime, Google connectivity, or hosted Preview is certified by this test']};
   const save=()=>fs.writeFile(path.join(artifactDir,'results.json'),JSON.stringify(report,null,2)+'\n');
-  function ab(...args){try{
+  // agent-browser 0.27 clicks selector targets without scrolling them into view first.
+  function ab(...args){if(args[0]==='click'&&typeof args[1]==='string'&&!args[1].startsWith('@'))abRaw('scrollintoview',args[1]);return abRaw(...args)}
+  function abRaw(...args){try{
     const result=JSON.parse(execFileSync('agent-browser',['--session',session,'--download-path',artifactDir,'--json',...args],{cwd:root,encoding:'utf8',timeout:60000,maxBuffer:5e6}));
     if(!result.success)throw Error(result.error||'Browser command failed');return result.data;
-  }catch{throw Error(`Agent Browser command failed: ${args[0]}${args[0]==='wait'?' '+args.slice(1).join(' '):args[0]==='click'?' '+args[1]:''}`)}}
+  }catch(error){const detail=String(error?.stdout||error?.message||'').replace(/\s+/g,' ').slice(0,300);throw Error(`Agent Browser command failed: ${args[0]}${args[0]==='wait'?' '+args.slice(1).join(' '):args[0]==='click'?' '+args[1]:''} (${detail})`)}}
   const ev=js=>ab('eval',js).result;
   const scroll=selector=>ev(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({behavior:'instant',block:'center'})`);
+  // Some agent-browser builds (0.27) accept `network route --abort` but do not intercept
+  // page fetches. Then reject /api/status inside the page, as a network abort would.
+  function abortStatus(){
+    ab('network','route','**/api/status','--abort');
+    if(ev(`fetch('/api/status?qa='+Date.now()).then(()=>'reached').catch(()=>'aborted')`)==='aborted')return;
+    ab('network','unroute');
+    if(!report.limitations.some(x=>x.startsWith('network route')))report.limitations.push('network route --abort sin efecto en esta versión de agent-browser: fallo de red simulado rechazando fetch(/api/status) en la página');
+    ev(`(()=>{window.__qaFetch??=window.fetch;window.fetch=(input,...rest)=>String(input?.url||input).includes('/api/status')?Promise.reject(new TypeError('Failed to fetch')):window.__qaFetch(input,...rest);return true})()`);
+  }
+  function restoreStatus(){ab('network','unroute');ev('(()=>{if(window.__qaFetch){window.fetch=window.__qaFetch;delete window.__qaFetch}return true})()')}
+  // agent-browser 0.27 saves downloads under the server filename and may miss the wait.
+  // Fall back to the newest fresh CSV in the artifact folder, moved to the expected path.
+  async function awaitDownload(target){
+    const started=Date.now()-60000;
+    try{ab('wait','--download',target);return}catch(error){
+      for(let i=0;i<40;i++){
+        const files=(await fs.readdir(artifactDir)).filter(f=>f.endsWith('.csv')&&!f.startsWith('SYNTHETIC-'));
+        const fresh=[];for(const f of files){const st=await fs.stat(path.join(artifactDir,f));if(st.mtimeMs>=started&&st.size>0)fresh.push([st.mtimeMs,f])}
+        fresh.sort((a,b)=>b[0]-a[0]);
+        if(fresh.length){await fs.rename(path.join(artifactDir,fresh[0][1]),target);if(!report.limitations.some(x=>x.startsWith('wait --download')))report.limitations.push('wait --download sin efecto en esta versión: se toma el CSV descargado más reciente');return}
+        await new Promise(r=>setTimeout(r,250));
+      }
+      throw error;
+    }
+  }
   function verify(name,details){report.flows.push({name,...details});if(details.pass===false)throw Error(name)}
-  function audit(phase,page,viewport){const r=ab('a11y','--tags','wcag2a,wcag2aa');report.a11y.push({phase,page,viewport,counts:r.counts,violations:r.violations,incomplete:r.incomplete.map(v=>({id:v.id,nodes:v.nodes.length}))});if(r.counts.violations)throw Error(`Accessibility violations: ${phase}/${page}`)}
+  let nativeA11y=null;
+  let axeSource=null;
+  function axeAudit(){
+    // Same WCAG 2 A/AA tag set as the native command. axe-core (pinned devDependency) is
+    // injected in chunks below the per-argument OS limit; QA harness pages only.
+    if(!ev('!!window.axe')){
+      axeSource??=fsSync.readFileSync(path.join(root,'node_modules','axe-core','axe.min.js'),'utf8');
+      ev('window.__axeSrc="";0');
+      for(let i=0;i<axeSource.length;i+=60000)ev(`(window.__axeSrc+=${JSON.stringify(axeSource.slice(i,i+60000))}).length`);
+      ev('(0,eval)(window.__axeSrc);delete window.__axeSrc;typeof axe');
+    }
+    const js=`axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}}).then(r=>JSON.stringify({counts:{violations:r.violations.length,incomplete:r.incomplete.length,passes:r.passes.length},violations:r.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>n.target.join(' ')).slice(0,5)})),incomplete:r.incomplete.map(v=>({id:v.id,nodes:v.nodes.map(()=>0)}))}))`;
+    return JSON.parse(ev(js));
+  }
+  function a11yRun(){
+    if(nativeA11y!==false){try{const r=ab('a11y','--tags','wcag2a,wcag2aa');nativeA11y=true;return r}catch(error){if(nativeA11y)throw error;nativeA11y=false;report.limitations.push('agent-browser sin comando a11y: auditoría axe-core 4.10.3 inyectada en loopback')}}
+    return axeAudit();
+  }
+  function audit(phase,page,viewport){const r=a11yRun();report.a11y.push({phase,page,viewport,counts:r.counts,violations:r.violations,incomplete:r.incomplete.map(v=>({id:v.id,nodes:v.nodes.length}))});if(r.counts.violations)throw Error(`Accessibility violations: ${phase}/${page}`)}
   async function start(mode){
     // Do not inherit runtime database, Google, access keys, or other configured secrets.
     const env={PATH:process.env.PATH,HOME:process.env.HOME,PORT:'0'};
@@ -130,9 +176,9 @@ async function regression(){
     ab('fill','#accessToken',token);ab('click','#accessSubmit');ab('wait','--text','Aún no hay datos disponibles');
     verify('actual Cloud harness authenticated without source',ev('(async()=>{const s=await fetch("/api/status").then(r=>r.json());return {pass:s.authenticated&&s.data.state==="not_configured"&&!document.querySelector(".kpi"),data:s.data.state}})()'));
     ab('click','#stateLogout');ab('wait','--text','Acceda a su operación');verify('logout rejects dashboard',ev('(async()=>({pass:(await fetch("/api/dashboard")).status===401&&!document.querySelector(".kpi")}))()'));
-    open(pending);ab('network','route','**/api/status','--abort');ab('click','#retryData');ab('wait','--text','No se pudo leer la operación');
+    open(pending);abortStatus();ab('click','#retryData');ab('wait','--text','No se pudo leer la operación');
     verify('network error disables data controls',ev('({pass:!document.querySelector(".kpi")&&[...document.querySelectorAll("#globalFilters input,#globalFilters select,#globalFilters button")].every(el=>el.disabled)})'));audit('flow','network error',[390,844]);
-    ab('network','unroute');ab('click','#retryData');ab('wait','--text','Prepare un acceso seguro');verify('network retry recovers',{pass:true});
+    restoreStatus();ab('click','#retryData');ab('wait','--text','Prepare un acceso seguro');verify('network retry recovers',{pass:true});
     ab('click','#menuToggle');verify('mobile drawer inerts workspace',ev('({pass:document.querySelector(".workspace").inert&&!document.getElementById("sidebar").inert})'));
     ab('focus','#nav a[data-page="admin"]');ab('press','Tab');verify('mobile drawer focus loop',ev('({pass:document.activeElement.classList.contains("side-brand")})'));
     ab('press','Escape');verify('mobile drawer Escape returns focus',ev('({pass:document.activeElement.id==="menuToggle"&&!document.querySelector(".workspace").inert&&document.getElementById("sidebar").inert})'));
@@ -145,11 +191,11 @@ async function regression(){
     goto('forecast');ab('select','#forecastHorizon','12');verify('nested validation follows selected horizon',ev('({pass:document.getElementById("horizonValidation")?.dataset.horizon==="12"&&document.getElementById("horizonValidation").innerText.includes("selección automática")})'));ab('select','#forecastHorizon','3');verify('nested validation switches horizon without relabeling one-step metrics',ev('({pass:document.getElementById("horizonValidation")?.dataset.horizon==="3"&&document.getElementById("content").innerText.includes("WAPE a un mes")})'));
     ev('for(const [id,value]of [["fFrom","2025-06-01"],["fTo","2025-08-31"]]){document.getElementById(id).value=value;document.getElementById(id).dispatchEvent(new Event("change"))}');ab('wait','--fn','!document.getElementById("content").hasAttribute("aria-busy")');goto('abc');
     ev('window.__qaExportMeta=[];window.__qaCaptureFetch=fetch;window.fetch=async(...args)=>{const r=await window.__qaCaptureFetch(...args);if(String(args[0]).startsWith("/api/exports?"))window.__qaExportMeta.push({status:r.status,type:r.headers.get("content-type"),url:String(args[0])});return r}');
-    scroll('[data-export="abc"]');ab('click','[data-export="abc"]');const consumptionFile=path.join(artifactDir,'SYNTHETIC-abc.csv');ab('wait','--download',consumptionFile);const csv=await fs.readFile(consumptionFile,'utf8');
+    scroll('[data-export="abc"]');ab('click','[data-export="abc"]');const consumptionFile=path.join(artifactDir,'SYNTHETIC-abc.csv');await awaitDownload(consumptionFile);const csv=await fs.readFile(consumptionFile,'utf8');
     verify('computed CSV download honors SKU and date filters',{pass:csv.trim().split(/\r?\n/).length===2&&csv.includes('QA-002')&&!csv.includes('QA-001')&&!csv.includes('QA-003'),dataRows:csv.trim().split(/\r?\n/).length-1});
-    goto('inventory');scroll('[data-export="inventory"]');ab('click','[data-export="inventory"]');const inventoryFile=path.join(artifactDir,'SYNTHETIC-inventory.csv');ab('wait','--download',inventoryFile);const inventoryCsv=await fs.readFile(inventoryFile,'utf8'),inventoryLines=inventoryCsv.trim().split(/\r?\n/),quantityColumn=inventoryLines[0].split(',').indexOf('"quantity"');
+    goto('inventory');scroll('[data-export="inventory"]');ab('click','[data-export="inventory"]');const inventoryFile=path.join(artifactDir,'SYNTHETIC-inventory.csv');await awaitDownload(inventoryFile);const inventoryCsv=await fs.readFile(inventoryFile,'utf8'),inventoryLines=inventoryCsv.trim().split(/\r?\n/),quantityColumn=inventoryLines[0].split(',').indexOf('"quantity"');
     verify('inventory CSV matches visible analytic stock',{pass:inventoryLines.length===2&&inventoryCsv.includes('QA-002')&&quantityColumn>=0&&inventoryLines[1].split(',')[quantityColumn]==='"30"',dataRows:inventoryLines.length-1});
-    goto('quality');scroll('#dataType');ab('select','#dataType','google_consumos');ab('fill','#dataSearch','QA-ORDER-19');scroll('#dataSearchBtn');ab('click','#dataSearchBtn');ab('wait','--fn','document.getElementById("rowResults").innerText.includes("QA-ORDER-19")&&!document.getElementById("rowResults").innerText.includes("QA-ORDER-18")');scroll('#rowCsv');ev('window.__qaExportMeta=[]');ab('click','#rowCsv');ab('wait','--fn','window.__qaExportMeta.length>0');verify('explorer CSV HTTP response',ev('({pass:window.__qaExportMeta[0].status===200&&window.__qaExportMeta[0].type.includes("text/csv")&&window.__qaExportMeta[0].url.includes("q=QA-ORDER-19"),response:window.__qaExportMeta[0],toast:document.getElementById("toast").innerText})'));const rowsFile=path.join(artifactDir,'SYNTHETIC-rows.csv');ab('wait','--download',rowsFile);const rowsCsv=await fs.readFile(rowsFile,'utf8');
+    goto('quality');scroll('#dataType');ab('select','#dataType','google_consumos');ab('fill','#dataSearch','QA-ORDER-19');scroll('#dataSearchBtn');ab('click','#dataSearchBtn');ab('wait','--fn','document.getElementById("rowResults").innerText.includes("QA-ORDER-19")&&!document.getElementById("rowResults").innerText.includes("QA-ORDER-18")');scroll('#rowCsv');ev('window.__qaExportMeta=[]');ab('click','#rowCsv');ab('wait','--fn','window.__qaExportMeta.length>0');verify('explorer CSV HTTP response',ev('({pass:window.__qaExportMeta[0].status===200&&window.__qaExportMeta[0].type.includes("text/csv")&&window.__qaExportMeta[0].url.includes("q=QA-ORDER-19"),response:window.__qaExportMeta[0],toast:document.getElementById("toast").innerText})'));const rowsFile=path.join(artifactDir,'SYNTHETIC-rows.csv');await awaitDownload(rowsFile);const rowsCsv=await fs.readFile(rowsFile,'utf8');
     verify('explorer CSV honors query and global filters',{pass:rowsCsv.trim().split(/\r?\n/).length===2&&rowsCsv.includes('QA-ORDER-19')&&rowsCsv.includes('QA-002')&&!rowsCsv.includes('QA-001'),dataRows:rowsCsv.trim().split(/\r?\n/).length-1});
     const urlBefore=ev('location.href');ab('fill','#dataSearch','QA_FORCE_EXPORT_LIMIT');scroll('#dataSearchBtn');ab('click','#dataSearchBtn');scroll('#rowCsv');ab('click','#rowCsv');ab('wait','--text','La exportación excede el límite');verify('CSV 413 stays in workspace',ev(`({pass:location.href===${JSON.stringify(urlBefore)}&&document.getElementById('toast').innerText.includes('límite'),message:document.getElementById('toast').innerText})`));
     // Delay only delivery of a real export response to exercise logout cancellation.
