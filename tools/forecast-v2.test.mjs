@@ -105,22 +105,34 @@ test('Claro recovery materials do not fabricate a zero-order Google forecast', (
   assert.equal(forecast.observations,0);
 });
 
-test('missing material quantities prevent fitting rather than masquerading as zero demand', () => {
+// Policy 2026-11 (owner request): an interior unverifiable month is a MISSING observation.
+// It is never summed as zero; models carry their own prediction through the gap and are not scored on it.
+test('missing material quantities stay unknown (never zero) and are handled as a missing observation', () => {
   const data=source();
   data.tables.google_consumos[5].quantity=null;
   const forecast=analyze(data).forecasts[0];
-  assert.deepEqual(forecast.pred,[]);
   assert.equal(forecast.history[5].units,null);
-  assert.equal(forecast.non_calculable_reason,'CANTIDADES_NO_VERIFICABLES');
   assert.ok(forecast.invalid_months.includes('2024-06'));
+  assert.deepEqual(forecast.missing_months,['2024-06']);
+  assert.ok(forecast.pred.length>0&&forecast.pred.every(x=>x>0),'no zero dragged in by the unknown month');
+  assert.match(forecast.data_quality_note,/no se imputa/);
+  assert.ok(!forecast.evaluation.candidates.some(c=>c.folds.some(x=>x.month==='2024-06')));
 });
 
-test('negative proxy quantities prevent fitting rather than masquerading as zero demand', () => {
+test('negative proxy quantities stay unknown and are handled as a missing observation', () => {
   const data=source();
   data.tables.dispatch_nonserial=Array.from({length:12},(_,i)=>({sku:'PEND-TENSORES',description:'Tensores',date:monthEnd(i),quantity:i===5?-2:10,tech:'TEST'}));
   const forecast=analyze(data).forecasts.find(x=>x.sku==='PEND-TENSORES');
-  assert.deepEqual(forecast.pred,[]);
   assert.equal(forecast.history[5].units,null);
+  assert.deepEqual(forecast.missing_months,[forecast.history[5].month]);
+  assert.ok(forecast.pred.length>0&&forecast.pred.every(x=>x>0));
+});
+
+test('an unverifiable LAST month still prevents fitting (no forecast from an unknown edge)', () => {
+  const data=source();
+  data.tables.google_consumos.at(-1).quantity=null;
+  const forecast=analyze(data).forecasts[0];
+  assert.deepEqual(forecast.pred,[]);
   assert.equal(forecast.non_calculable_reason,'CANTIDADES_NO_VERIFICABLES');
 });
 
@@ -192,7 +204,9 @@ test('invalid quantities in an excluded closing month do not contaminate prior c
   assert.ok(forecast.invalid_months.includes('2024-12'));
 });
 
-test('an invalid demand month also suppresses the unvalidated order driver', () => {
+test('the order driver excludes an unknown month from both numerator and denominator', () => {
   const data=source();data.tables.google_consumos[5].quantity=null;
-  assert.deepEqual(analyze(data).forecasts[0].driver_pred,[]);
+  const f=analyze(data).forecasts[0];
+  assert.ok(Array.isArray(f.driver_pred));
+  assert.ok(f.driver_pred.every(x=>Number.isFinite(x)&&x>=0));
 });

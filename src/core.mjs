@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import {deriveBusiness,isLabor,isPhysicalSupply} from './business.mjs';
 import {deriveInsights} from './insights.mjs';
 import {forecastMonthly} from './forecast.mjs';
+import {createCatalogResolver} from './catalog.mjs';
 export const hash=x=>crypto.createHash('sha256').update(typeof x==='string'?x:JSON.stringify(x)).digest('hex');
 export const norm=x=>String(x??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'').trim();
 export const upper=x=>String(x??'').trim().toUpperCase();
@@ -68,8 +69,8 @@ export function reconstructInventory(tables, catalog=new Map()){
  return {rows,issues:qa,eligible:true,sapCut,etaCut};
 }
 
-export function analyze(data,config={},filter={}){const tables=data.tables||{},get=t=>tables[t]||[],skus=new Map(),techs=new Map(),byName=new Map(),qa=[],sources=Object.fromEntries(Object.entries(tables).map(([k,v])=>[k,{rows:v.length,available:v.length>0}]));
-for(const r of get('sku_catalog')){if(!r.sku)continue;const curr=skus.get(r.sku)||{sku:r.sku,description:r.description||'',cost:null,category:'Material',center:r.center,warehouse:r.warehouse};const c=number(r.cost);if(c!==null&&c>=0){curr.cost_evidence=curr.cost_evidence||[];curr.cost_evidence.push({cost:c,center:r.center,warehouse:r.warehouse,lot:r.lot});const distinct=[...new Set(curr.cost_evidence.map(x=>x.cost))];curr.cost=distinct.length===1?distinct[0]:null;}curr.description||=r.description;skus.set(r.sku,curr);if(r.description){const k=norm(r.description),match=byName.get(k)||new Set();match.add(r.sku);byName.set(k,match)}}
+export function analyze(data,config={},filter={}){const tables=data.tables||{},get=t=>tables[t]||[],CAT=createCatalogResolver(get('sku_catalog')),skus=new Map(),techs=new Map(),byName=new Map(),qa=[],sources=Object.fromEntries(Object.entries(tables).map(([k,v])=>[k,{rows:v.length,available:v.length>0}]));
+for(const r of get('sku_catalog')){if(!r.sku)continue;const curr=skus.get(r.sku)||{sku:r.sku,description:r.description||'',cost:null,category:'Material',center:r.center,warehouse:r.warehouse};const c=number(r.cost);if(c!==null&&c>=0){curr.cost_evidence=curr.cost_evidence||[];curr.cost_evidence.push({cost:c,center:r.center,warehouse:r.warehouse,lot:r.lot});}const rc=CAT.cost(r.sku);curr.cost=rc.cost;curr.cost_basis=rc.basis;curr.cost_source=rc.cost===null?rc.reason:rc.source;curr.description||=r.description;skus.set(r.sku,curr);if(r.description){const k=norm(r.description),match=byName.get(k)||new Set();match.add(r.sku);byName.set(k,match)}}
 for(const r of get('technicians'))if(r.tech){techs.set(r.tech,{code:r.tech,name:r.name||r.tech,active:norm(r.status)==='activo',employment:r.employment||'SIN CLASIFICAR'})}
 const ensureSKU=(sku,desc)=>{if(!sku)return;const x=skus.get(sku)||{sku,description:desc||sku,cost:null,category:'Sin catalogar'};x.description=x.description||desc||sku;skus.set(sku,x)};
 const catalogIds=new Set(get('sku_catalog').map(x=>x.sku));const excludedSkus=new Map();const sourceName=get('google_consumos').length?'google_consumos':'claro_export';const allOrders=get('google_consumos').filter(r=>r.order&&r.date);const actualCons=[];const catalogNames=new Map(get('sku_catalog').map(x=>[x.sku,x.description]));for(const r of get(sourceName)){if(!r.sku||!r.order||!r.date)continue;if(r.sku==='7005189'||!catalogIds.has(r.sku)||isLabor(r,catalogNames)){const why=r.sku==='7005189'?'EXCLUIDO 7005189':!catalogIds.has(r.sku)?'NO CATALOGADO':'SERVICIO';excludedSkus.set(r.sku,why);continue;}ensureSKU(r.sku,r.description);actualCons.push({...r,_source:sourceName,_key:r._sheet_row?String(r._sheet_row):eventKey(sourceName,r)})}
@@ -108,21 +109,25 @@ const monthlyForecast=(vals,months,cutoff)=>forecastMonthly(vals,months,{
  horizon:12,cutoff,coverageStart:filter.from||null,
  cutoffBasis:filter.to&&cutoff===filter.to?'FILTRO_HASTA':filter.month&&cutoff?.startsWith(filter.month)?'FILTRO_MES':'ULTIMO_EVENTO_OBSERVADO'
 });
-// Invalid observations are unknown quantities, not zero demand. Keep the grid intact and withhold an unverifiable fit.
-const invalidQuantityMonths=new Map();
+// Invalid observations are unknown quantities, not zero demand. A month stays unknown when
+// invalid/atypical rows exceed INVALID_MONTH_SHARE of that SKU-month; isolated invalid rows
+// are excluded (their quantity is not summed) and the month is labelled with the count.
+const INVALID_MONTH_SHARE=0.02,invalidQuantityMonths=new Map(),monthRows=new Map();
 for(const r of filtered){
+ const key=r.sku+'|'+String(r.date||'').slice(0,7),c=monthRows.get(key)||{rows:0,invalid:0};c.rows++;
  const q=number(r.quantity);
- if(q===null||q<0||(r.serial?q!==1:q>10000)){
-  const invalid=invalidQuantityMonths.get(r.sku)||new Set();
-  invalid.add(r.date.slice(0,7));invalidQuantityMonths.set(r.sku,invalid);
- }
+ if(q===null||q<0||(r.serial?q!==1:q>10000))c.invalid++;
+ monthRows.set(key,c);
 }
+for(const [key,c] of monthRows)if(c.invalid&&c.invalid/c.rows>INVALID_MONTH_SHARE){const [sku,month]=key.split('|');const invalid=invalidQuantityMonths.get(sku)||new Set();invalid.add(month);invalidQuantityMonths.set(sku,invalid)}
 const direct=Array.from(consSku.keys()).filter(sku=>!isPhysicalSupply(sku,skus.get(sku)?.description));
 for(const sku of direct){
- const vals=periods.map(m=>invalidQuantityMonths.get(sku)?.has(m)?null:skuMonthly.get(sku)?.get(m)||0);
- const f=monthlyForecast(vals,periods,consumptionCut);
+ // Months before the SKU first appears in Consumos are pre-introduction, not zero demand.
+ const first=periods.findIndex(m=>monthRows.has(sku+'|'+m)),range=first<0?periods:periods.slice(first);
+ const vals=range.map(m=>invalidQuantityMonths.get(sku)?.has(m)?null:skuMonthly.get(sku)?.get(m)||0);
+ const f=monthlyForecast(vals,range,consumptionCut);
  fcs.push({sku,description:skus.get(sku)?.description||sku,
-  history:periods.map((month,i)=>({month,units:vals[i],training:f.training_months.includes(month)})),
+  history:range.map((month,i)=>({month,units:vals[i],training:f.training_months.includes(month),excluded_rows:vals[i]===null?0:(monthRows.get(sku+'|'+month)?.invalid||0)})),
   ...f,cost:skus.get(sku)?.cost??null,source:'CONSUMO SISTÉMICO'});
 }
 const physSkus=new Set(get('physical_counts').filter(x=>isPhysicalSupply(x.sku,x.description)).map(x=>x.sku));
@@ -140,14 +145,14 @@ for(const sku of physSkus){
  const f=monthlyForecast(vals,range,dispatchCut);
  fcs.push({sku,description:skus.get(sku)?.description||rows[0]?.description||sku,
   history:range.map((month,i)=>({month,units:vals[i],training:f.training_months.includes(month)})),
-  ...f,cost:skus.get(sku)?.cost??null,source:'DESPACHOS NO SERIALIZADOS · PROXY DEMANDA',
+  ...f,cost:CAT.cost(sku,rows[0]?.description).cost,source:'DESPACHOS NO SERIALIZADOS · PROXY DEMANDA',
   data_quality_note:[f.data_quality_note,'Estimación basada en entregas al técnico; no prueba consumo efectivo.'].filter(Boolean).join(' ')});
 }
 // Order demand requires Google Consumos even when a recovery export supplies material lines.
 const orderPeriods=allOrders.length?periods:[],orderSeries=orderPeriods.map(m=>prodMonthly.get(m)?.size||0),orderForecast=monthlyForecast(orderSeries,orderPeriods,orderCut);
 for(const f of fcs){
  f.ensemble_validated=false;
- const comparable=f.training_months.filter(m=>orderForecast.training_months.includes(m));
+ const comparable=f.training_months.filter(m=>orderForecast.training_months.includes(m)&&!(f.missing_months||[]).includes(m));
  const numerator=f.history.filter(x=>comparable.includes(x.month)).reduce((sum,x)=>sum+x.units,0);
  const denominator=comparable.reduce((sum,m)=>sum+(prodMonthly.get(m)?.size||0),0);
  if(f.source!=='CONSUMO SISTÉMICO'||!f.pred.length||!orderForecast.pred.length||!denominator){

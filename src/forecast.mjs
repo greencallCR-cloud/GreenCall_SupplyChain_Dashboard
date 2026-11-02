@@ -2,6 +2,10 @@
 // Candidate eligibility is frozen before the first validation target is seen.
 const total = a => a.reduce((sum, x) => sum + x, 0);
 const finiteDemand = a => Array.isArray(a) && a.every(x => typeof x === 'number' && Number.isFinite(x) && x >= 0);
+const known = x => typeof x === 'number' && Number.isFinite(x) && x >= 0;
+// Interior unknown months (null) are missing observations, never zero demand.
+const demandOrMissing = a => Array.isArray(a) && a.every(x => x === null || known(x));
+const MAX_MISSING_SHARE = 0.15, MIN_OBSERVED = 6;
 const monthIndex = m => +m.slice(0, 4) * 12 + +m.slice(5, 7) - 1;
 const monthAt = i => `${Math.floor(i / 12)}-${String(i % 12 + 1).padStart(2, '0')}`;
 const validMonth = m => /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
@@ -26,7 +30,8 @@ export function forecastMetrics(actual, predicted) {
   };
 }
 
-function demandPattern(values) {
+function demandPattern(input) {
+  const values = input.filter(known);
   const positive = values.filter(x => x > 0), adi = positive.length ? values.length / positive.length : Infinity;
   const mean = positive.length ? total(positive) / positive.length : 0;
   const cv2 = positive.length > 1 ? total(positive.map(x => (x - mean) ** 2)) / (positive.length * mean ** 2) : 0;
@@ -91,8 +96,8 @@ const models = {
   hwmul: (a, h) => winters(a, h, true),
 };
 
-function eligibleModels(prefix) {
-  const n = prefix.length, names = ['naive'];
+function eligibleModels(input) {
+  const prefix = input.filter(known), n = prefix.length, names = ['naive'];
   if (n >= 3) names.push('ma3', 'ses');
   if (n >= 6) names.push('ma6', 'holt', 'damped');
   if (n >= 8 && ['Intermittent', 'Lumpy'].includes(demandPattern(prefix).pattern)) names.push('croston', 'sba', 'tsb');
@@ -102,7 +107,21 @@ function eligibleModels(prefix) {
   return names;
 }
 
-function prediction(name, values, horizon) {
+// State-space treatment of a missing observation: the model carries its own one-step
+// prediction through the gap (for exponential smoothing this equals skipping the update).
+function fillMissing(name, values) {
+  const out = [];
+  for (const x of values) {
+    if (x !== null) { out.push(x); continue; }
+    if (!out.length) continue;
+    const step = models[name](out, 1)[0];
+    out.push(Number.isFinite(step) ? Math.max(0, step) : out.at(-1));
+  }
+  return out;
+}
+function prediction(name, input, horizon) {
+  const values = input.some(x => x === null) ? fillMissing(name, input) : input;
+  if (!values.length) return null;
   if (name === 'hwmul' && values.some(x => x <= 0)) return null;
   const result = models[name](values, horizon);
   return result.every(Number.isFinite) ? result.map(x => Math.max(0, x)) : null;
@@ -120,6 +139,7 @@ function selectForecast(values, months, horizon) {
     const folds = [];
     let status = 'EVALUADO';
     for (let t = firstOrigin; t < n; t++) {
+      if (values[t] === null) continue; // no score against an unknown month
       const projected = prediction(name, values.slice(0, t), 1);
       if (!projected) {status = 'NO_COMPARABLE'; break;}
       folds.push({train_end:months[t-1],month:months[t],actual:values[t],predicted:projected[0]});
@@ -160,16 +180,18 @@ function evaluateHorizons(values, months, leadOffset=0) {
         predicted:selection.projected.slice(leadOffset),baseline_predicted:prediction('naive',prefix,horizon+leadOffset).slice(leadOffset),
       });
     }
-    const actual=origins.flatMap(x=>x.actual);
+    for (const o of origins) o.scored=o.actual.map(x=>x!==null);
+    const pairs=origins.flatMap(o=>o.actual.map((a,i)=>({a,p:o.predicted[i],b:o.baseline_predicted[i]}))).filter(x=>x.a!==null);
+    const actual=pairs.map(x=>x.a);
     return [horizon,{...base,status:'EVALUADO',observed_horizon:horizon,backtests:origins.length,observations:actual.length,
-      ...forecastMetrics(actual,origins.flatMap(x=>x.predicted)),
-      baseline:{model:'naive',...forecastMetrics(actual,origins.flatMap(x=>x.baseline_predicted))},origins,reason:null,
+      ...forecastMetrics(actual,pairs.map(x=>x.p)),
+      baseline:{model:'naive',...forecastMetrics(actual,pairs.map(x=>x.b))},origins,reason:null,
     }];
   }));
 }
 
 export function forecastOne(values, months, horizon = 6, {leadOffset=0}={}) {
-  if (!finiteDemand(values) || !Array.isArray(months) || values.length !== months.length || !months.every(validMonth)
+  if (!demandOrMissing(values) || !Array.isArray(months) || values.length !== months.length || !months.every(validMonth)
     || months.some((m, i) => i > 0 && monthIndex(m) !== monthIndex(months[i - 1]) + 1)) {
     throw new TypeError('Forecast requires finite nonnegative values on an aligned consecutive monthly grid.');
   }
@@ -197,9 +219,13 @@ export function forecastMonthly(values, months, {horizon=12, cutoff=null, covera
   const start=isOpeningPartial?1:0, end=isClosingPartial?Math.max(start,months.length-1):months.length;
   const trainingMonths=months.slice(start,end), trainingValues=values.slice(start,end);
   const invalidMonths=months.filter((_,i)=>!finiteDemand([values[i]]));
-  if (trainingValues.some(x=>!finiteDemand([x]))) {
+  const missingIdx=trainingValues.map((x,i)=>x===null?i:-1).filter(i=>i>=0);
+  const missingMonths=missingIdx.map(i=>trainingMonths[i]);
+  const blocked=trainingValues.some(x=>!(x===null||known(x)))||missingIdx.length>0&&(trainingValues[0]===null||trainingValues.at(-1)===null
+    ||missingIdx.length/trainingValues.length>MAX_MISSING_SHARE||trainingValues.length-missingIdx.length<MIN_OBSERVED);
+  if (blocked) {
     return {...forecastOne([],[],horizon),excluded_months:excluded,partial_month:isClosingPartial?months.at(-1):null,
-      cutoff,cutoff_basis:cutoffBasis,training_months:[],invalid_months:invalidMonths,
+      cutoff,cutoff_basis:cutoffBasis,training_months:[],invalid_months:invalidMonths,missing_months:missingMonths,
       non_calculable_reason:'CANTIDADES_NO_VERIFICABLES',
       data_quality_note:'Cantidades no verificables impiden el ajuste: los meses afectados no se imputan como demanda cero.',
     };
@@ -211,8 +237,9 @@ export function forecastMonthly(values, months, {horizon=12, cutoff=null, covera
   forecast.forecast_months=forecast.pred.length?nextMonths(anchor,horizon):[];
   forecast.forecast_start=forecast.forecast_months[0]||null;
   return {...forecast,excluded_months:excluded,partial_month:isClosingPartial?months.at(-1):null,invalid_months:invalidMonths,
-    cutoff,cutoff_basis:cutoffBasis,training_months:trainingMonths,
-    data_quality_note:excluded.length?'Meses de borde parciales o sin cierre acreditado excluidos del ajuste y del backtest.':null,
+    cutoff,cutoff_basis:cutoffBasis,training_months:trainingMonths,missing_months:missingMonths,
+    data_quality_note:[excluded.length?'Meses de borde parciales o sin cierre acreditado excluidos del ajuste y del backtest.':null,
+      missingMonths.length?'Meses con cantidades no verificables ('+missingMonths.join(', ')+') tratados como observación faltante: el modelo propaga su propia predicción y no se evalúa contra ellos; no se imputa demanda.':null].filter(Boolean).join(' ')||null,
     completeness_note:'El último evento no certifica cobertura del origen. Meses interiores sin eventos se tratan como cero dentro del histórico cargado; verificar integridad de la extracción.',
   };
 }
