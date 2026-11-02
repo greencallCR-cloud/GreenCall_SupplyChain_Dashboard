@@ -2,7 +2,7 @@ name: GreenCall quality
 
 on:
   push:
-    branches: [develop-cloud, 'codex/**']
+    branches: [develop-cloud, 'codex/**', 'claude/**']
   pull_request:
     branches: [develop-cloud]
   workflow_dispatch:
