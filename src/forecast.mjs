@@ -101,7 +101,9 @@ function eligibleModels(input) {
   if (n >= 3) names.push('ma3', 'ses');
   if (n >= 6) names.push('ma6', 'holt', 'damped');
   if (n >= 8 && ['Intermittent', 'Lumpy'].includes(demandPattern(prefix).pattern)) names.push('croston', 'sba', 'tsb');
-  if (n >= 12) names.push('seasonal');
+  // Seasonal models need two full cycles: one cycle cannot separate seasonality from a one-off
+  // event (e.g. a temporary substitution by another SKU, HERRAJE DSG08 2025-10..2026-03).
+  if (n >= 24) names.push('seasonal');
   if (n >= 24) names.push('hwadd');
   if (n >= 24 && prefix.every(x => x > 0)) names.push('hwmul');
   return names;
