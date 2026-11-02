@@ -11,10 +11,11 @@ test('real cloud HTTP harness exposes public assets and denies private paths and
    child.stdout.on('data',chunk=>{const match=String(chunk).match(/http:\/\/127\.0\.0\.1:\d+/);if(match){clearTimeout(timer);resolve(match[0])}});
   });
   const status=await fetch(base+'/api/status');
-  assert.equal(status.status,200);assert.equal((await status.json()).access.state,'not_configured');
+  assert.equal(status.status,200);const body=await status.json();assert.equal(body.access.role,'public');assert.equal(body.access.admin_configured,false);
   assert.match(status.headers.get('cache-control'),/no-store/);
-  const dashboard=await fetch(base+'/api/dashboard');assert.equal(dashboard.status,503);
-  assert.equal((await dashboard.json()).code,'ACCESS_NOT_CONFIGURED');
+  const dashboard=await fetch(base+'/api/dashboard');assert.equal(dashboard.status,503,'public read reaches the (absent) snapshot and fails explicitly');
+  assert.ok(['SNAPSHOT_REQUIRED','DATA_UNAVAILABLE'].includes((await dashboard.json()).code));
+  for(const url of ['/api/rows','/api/sheets/status','/api/physical/batches','/api/exports?type=google_consumos'])assert.equal((await fetch(base+url)).status,503,url+' admin not configured');
   for(const url of ['/local-data/base.json','/.env','/docs/GREENCALL_ESTADO_CONTINUIDAD.md','/lib/cloud-auth.mjs'])assert.equal((await fetch(base+url)).status,404,url);
   assert.equal((await fetch(base+'/api/status',{method:'POST'})).status,405);
   assert.equal((await fetch(base+'/api/import/apply',{method:'POST'})).status,404);

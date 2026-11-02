@@ -30,16 +30,19 @@ test('CSV exceeding the serverless response budget is refused before sending a p
  const exporter=createExportService({loadSnapshot:async()=>({data})});
  await assert.rejects(exporter.exportCsv({type:'consumptions'}),{code:'EXPORT_LIMIT'});
 });
-test('CSV route authenticates before accessing the export service',async()=>{
+test('public CSV is limited to aggregated tables and strips private columns; raw exports need admin',async()=>{
  let calls=0;
- const env={GREENCALL_ACCESS_KEY:'test-access-key-only-000000000000000000000000',GREENCALL_SESSION_SECRET:'test-signing-secret-only-11111111111111111111'};
+ const env={GREENCALL_ADMIN_KEY:'test-admin-key-only-2222222222222222222222222222',GREENCALL_SESSION_SECRET:'test-signing-secret-only-11111111111111111111'};
  const api=createCloudApi({env,getExporter:async()=>{calls++;return createExportService({loadSnapshot:async()=>({data:fixture()})})}});
  const req=(path,init={})=>new Request('https://preview.example'+path,init);
- assert.equal((await api(req('/api/exports?type=abc'))).status,401);assert.equal(calls,0);
- const login=await api(req('/api/login',{method:'POST',headers:{origin:'https://preview.example','content-type':'application/json'},body:JSON.stringify({token:env.GREENCALL_ACCESS_KEY})}));
+ for(const type of ['consumptions','dispatch','google_consumos','physical','intervals'])assert.equal((await api(req('/api/exports?type='+type))).status,401,type);
+ assert.equal(calls,0);
+ const pub=await api(req('/api/exports?type=abc'));
+ assert.equal(pub.status,200);assert.match(pub.headers.get('content-type'),/text\/csv/);assert.equal(calls,1);
+ const login=await api(req('/api/login',{method:'POST',headers:{origin:'https://preview.example','content-type':'application/json'},body:JSON.stringify({token:env.GREENCALL_ADMIN_KEY})}));
  const cookie=login.headers.get('set-cookie').split(';')[0];
- const result=await api(req('/api/exports?type=abc',{headers:{cookie}}));
- assert.equal(result.status,200);assert.match(result.headers.get('content-type'),/text\/csv/);assert.equal(calls,1);
+ assert.equal((await api(req('/api/exports?type=consumptions',{headers:{cookie}}))).status,200);
+ await assert.rejects(createExportService({loadSnapshot:async()=>({data:fixture()})}).exportCsv({type:'consumptions',publicView:true}),{code:'INVALID_QUERY'});
 });
 test('inventory download follows displayed stock and the raw explorer uses snapshot cuts',async()=>{
  const data=fixture();data.tables.inventory_real=[{sku:'TEST-A',location:'TEST-TECH',location_type:'Técnico',quantity:1,cost:null,value:null,result:'INCLUIDO',eta_cut:'2026-09-30',sap_cut:'2026-09-29'}];data.sources.inventory_real={source_type:'GOOGLE_SHEETS_API_READ_ONLY',source_tab:'Inventario Real',original_data_rows:1,retrieved_at:captured,sanitized:true};

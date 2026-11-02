@@ -37,7 +37,8 @@
           <span class="pill mini" id="cutBadge">Corte sin verificar</span>
           <span class="pill mini" id="sheetBadge">Fuentes sin verificar</span>
           <button class="runtime-button" id="sourceHealth" title="Ver salud de fuentes"><i aria-hidden="true"></i><span id="runtimeBadge">Verificando</span></button>
-          <button class="btn-quiet session-button" id="sessionLogout" hidden>Cerrar sesión</button>
+          <button class="btn-quiet admin-button" id="adminButton" type="button" aria-haspopup="dialog" aria-controls="adminModal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Administrador</span></button>
+          <button class="btn-quiet session-button" id="sessionLogout" type="button" hidden>Salir de administración</button>
           <span class="brand-divider" aria-hidden="true"></span>
           <img class="brand-img" src="/assets/claro.png" alt="Claro" width="36" height="36">
         </div>
@@ -45,7 +46,7 @@
       <main>
         <section class="hero" aria-labelledby="pageTitle">
           <div><div class="hero-overline" id="pageCategory">Visión de la operación</div><h1 id="pageTitle">Resumen ejecutivo</h1><p id="pageSubtitle">Inventario, demanda y decisiones de abastecimiento en un solo lugar.</p></div>
-          <button class="btn-primary hero-action" id="jumpImport"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M4 14v6h16v-6"/></svg>Toma física</button>
+          <button class="btn-primary hero-action" id="jumpImport" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M4 14v6h16v-6"/></svg>Toma física</button>
         </section>
         <div id="warning" class="warning" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3h.01"/></svg><div><strong>Verificando disponibilidad</strong><span>El estado de las fuentes aparecerá cuando responda el servidor.</span></div><button id="warningAction" class="btn-quiet">Ver fuentes</button></div>
         <details class="filter-strip" id="globalFilters" open>
@@ -58,6 +59,7 @@
     </div>
   </div>
   <div class="modal" id="focusModal" role="dialog" aria-modal="true" aria-labelledby="focusTitle" hidden><div class="modal-card"><div class="modal-head"><h2 id="focusTitle">Gráfico ampliado</h2><button id="closeFocus" aria-label="Cerrar gráfico ampliado">✕</button></div><div id="focusChart"></div></div></div>
+  <div class="modal" id="adminModal" role="dialog" aria-modal="true" aria-labelledby="adminTitle" aria-describedby="adminIntro" hidden><div class="modal-card admin-card"><div class="modal-head"><h2 id="adminTitle">Modo administrador</h2><button id="closeAdmin" type="button" aria-label="Cerrar modo administrador">✕</button></div><p id="adminIntro" class="help-text">Habilita Toma física, Salud de fuentes y Administración. La consulta de indicadores no requiere clave.</p><form id="adminForm" class="access-form" autocomplete="off"><label for="adminToken">Clave administrativa</label><div class="access-row"><input id="adminToken" name="admin-token" type="password" autocomplete="current-password" spellcheck="false" required aria-describedby="adminError"><button class="btn-primary" id="adminSubmit" type="submit">Ingresar</button></div><p class="form-error" id="adminError" role="alert"></p></form></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
