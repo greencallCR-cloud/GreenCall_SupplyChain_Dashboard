@@ -2,6 +2,21 @@
 
 > Este documento SE DEBE ACTUALIZAR EN CADA HITO VERIFICADO y commitear. En nueva tarea, se lee junto con AGENTS.md. No escribir secretos ni datos personales.
 
+## Incidente resuelto — sincronización Sheets → Neon (03/11/2026)
+- **Síntoma:** `GreenCall Sheets sync` falló 3 veces (runs 41591815291, 41672098402, 41707362262) con `sync failed: SYNC_UNAVAILABLE` en «Read Sheets and publish snapshot». El mismo commit `837eb63` había funcionado el 02/11. El snapshot activo (`11dbd363`, 02/11 23:31) se conservó.
+- **Causa raíz (verificada):** «Existencias ETA» se reemplazó en origen por un **nuevo corte 02/11/2026 (7 741 filas)**. El corte anterior era 26/10/2026 (8 425 filas). El guardarraíl anti-truncamiento («reducción >0,5 %»), pensado para historiales acumulativos, también se aplicaba a tablas de corte y bloqueó un corte legítimo. El `Error` genérico quedó enmascarado como `SYNC_UNAVAILABLE`. **No era la cuota de Neon:** lecturas con el rol de sync OK, comparación de pestañas por exportación pública de solo lectura.
+- **Corrección (PR #8 https://github.com/greencallCR-cloud/GreenCall_SupplyChain_Dashboard/pull/8, merge `3993d59`):**
+  - `reductionDecision()`: las tablas de corte (`eta`, `inventory_real`, `sap_serials`) pueden tener menos filas solo con un corte más nuevo y nunca con una pérdida mayor al 50 %; los historiales mantienen el 0,5 %.
+  - `SheetsSyncError` con códigos estables y detalle seguro en lista permitida (sin conteos, cuerpos de Google ni credenciales).
+  - Etapa de falla: STAGING, NEON_CONNECT, GOOGLE_AUTH, SHEETS_READ, VALIDATION o PUBLISH, impresa por el workflow junto con `new_cuts`.
+  - Regresión en `tools/sync-guards.test.mjs` (7 casos). `npm test` 171/0.
+- **Verificación:** run 41710667028 OK → `mode=published`, `new_cuts={eta:2026-10-26→2026-11-02, −8,1 %}`.
+  - Snapshot nuevo `69429cce` (03/11 20:16:58), con conteos iguales a la hoja: Consumos 175 709, Inventario Real 4 665, ETA 7 741, Series SAP 5 063. Cortes: SAP/ETA 2026-11-02, inventario 2026-11-01.
+  - 3 snapshots conservados en Neon.
+  - Precálculo: 22,4 s en frío → 0,28 s.
+  - Production pública: 17 513 órdenes únicas (antes 17 290); smoke 12 páginas y 28/28 gráficos en desktop y móvil.
+- **Regla operativa:** si vuelve a fallar, el log indica `stage=... code=...`. `SOURCE_REDUCTION` con «mismo corte» = revisar el origen (posible truncamiento); no relajar el umbral.
+
 ## Estado vigente — v3 acceso público (02/11/2026, Claude Code, rama `claude/public-access-v3`)
 Base: `origin/main` `0e5356f`. Paquete del titular «Continuidad Acceso Público v3» (privado, fuera del repo; el Excel real y las capturas NO se commitean).
 
