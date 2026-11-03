@@ -63,9 +63,9 @@ jobs:
           status=$?
           set -e
           if [ "$status" -eq 0 ]; then
-            node -e "const r=require(process.argv[1]);console.log('sync ok: mode='+r.mode)" "$PRIVATE/result.json"
+            node -e "const r=require(process.argv[1]);console.log('sync ok: mode='+r.mode+' new_cuts='+JSON.stringify(r.new_cuts||{}))" "$PRIVATE/result.json"
           else
-            node -e "try{const r=require(process.argv[1]);console.log('sync failed: '+r.code)}catch{console.log('sync failed')}" "$PRIVATE/error.json"
+            node -e "try{const r=require(process.argv[1]);console.log('sync failed: stage='+r.stage+' code='+r.code+' detail='+JSON.stringify(r.detail||{}));console.log('::error::Sheets sync '+r.stage+' '+r.code)}catch{console.log('sync failed')}" "$PRIVATE/error.json"
           fi
           rm -rf "$PRIVATE"
           exit "$status"
