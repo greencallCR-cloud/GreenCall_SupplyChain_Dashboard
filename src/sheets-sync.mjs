@@ -41,9 +41,27 @@ const EXPECTED_HEADERS={
 };
 function sourceHeaderIndex(type,rows){const req=EXPECTED_HEADERS[type];if(!req)throw Error('Fuente inesperada');
  const ix=rows.findIndex(row=>{const h=new Set((row||[]).map(norm));return req.every(x=>h.has(x))});
- if(ix<0)throw Error('Encabezados incompatibles con '+type);return ix;
+ if(ix<0)throw syncFail('SOURCE_HEADERS_INCOMPATIBLE','Encabezados incompatibles con '+type,{type});return ix;
 }
 const SCOPES='https://www.googleapis.com/auth/spreadsheets.readonly';
+/** Sync failure with a stable code and a SAFE detail (tab names, HTTP status, percentages): never
+ * credentials, connection strings, Google response bodies or operational values. */
+export class SheetsSyncError extends Error{constructor(code,message,safe={}){super(message);this.name='SheetsSyncError';this.code=code;this.safe=safe}}
+const syncFail=(code,message,safe)=>new SheetsSyncError(code,message,safe);
+// Tables that are a stock CUT (replaced wholesale on every cut) and the field(s) holding the cut date.
+// Everything else is treated as an append-only history.
+export const CUT_FIELDS=Object.freeze({eta:['cut'],inventory_real:['eta_cut','sap_cut'],sap_serials:['cut']});
+const maxCut=(rows,fields)=>{let m='';for(const r of rows)for(const f of fields){const v=String(r?.[f]||'');if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v>m)m=v}return m||null};
+/** Guard against silent truncation. Histories: >0.5 % fewer rows is blocked. Stock cuts: fewer rows
+ * are accepted only when the source carries a NEWER cut date, and never a loss above 50 %. */
+export function reductionDecision(type,existing,merged){
+  if(existing.length<=100||merged.length>=existing.length*.995)return {allowed:true,reason:'NO_REDUCTION'};
+  const pct=Math.round((1-merged.length/existing.length)*1000)/10,fields=CUT_FIELDS[type];
+  if(fields){const before=maxCut(existing,fields),after=maxCut(merged,fields);
+    if(before&&after&&after>before&&merged.length>=existing.length*.5)return {allowed:true,reason:'NEW_CUT',reduction_pct:pct,previous_cut:before,new_cut:after};
+    return {allowed:false,code:'SOURCE_REDUCTION',reduction_pct:pct,detail:after&&before&&after>before?'nuevo corte con pérdida mayor al 50 %':'mismo corte o corte anterior con menos filas'}}
+  return {allowed:false,code:'SOURCE_REDUCTION',reduction_pct:pct,detail:'historial acumulativo con menos filas'};
+}
 const escapeRange=s=>`'${s.replaceAll("'","''")}'`;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function safeConf(c={}){
@@ -66,14 +84,14 @@ export class SheetsSync {
   state:this.busy?'SINCRONIZANDO':this.lastError?'ERROR':!this.config.enabled?'PRECARGADOS':this.config.last_sync_at?'CONECTADO':'PRECARGADOS',
   last_error:this.lastError,last_attempt:this.lastAttempt||this.config.last_attempt_at,account_email:this.accountEmail||null}}
   async save(){await fs.mkdir(path.dirname(this.configPath),{recursive:true});const tmp=this.configPath+'.tmp';await fs.writeFile(tmp,JSON.stringify(this.config,null,2),{mode:0o600});await fs.rename(tmp,this.configPath)}
-  async readCredential(filePath=this.config.credential_path){if(!filePath)throw Error('Configure la ruta del archivo JSON de cuenta de servicio.');
+  async readCredential(filePath=this.config.credential_path){if(!filePath)throw syncFail('GOOGLE_CREDENTIAL_INVALID','Configure la ruta del archivo JSON de cuenta de servicio.');
     const resolved=path.resolve(String(filePath));
     // Evitar empaquetar accidentalmente secretos o servirlos desde el webroot.
     const projectRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-    if(resolved===projectRoot||resolved.startsWith(projectRoot+path.sep))throw Error('Guarde la credencial fuera de la carpeta del dashboard.');
-    const s=await fs.stat(resolved);if(!s.isFile()||s.size>30_000)throw Error('El archivo de credenciales no es válido.');
+    if(resolved===projectRoot||resolved.startsWith(projectRoot+path.sep))throw syncFail('GOOGLE_CREDENTIAL_INVALID','Guarde la credencial fuera de la carpeta del dashboard.');
+    const s=await fs.stat(resolved);if(!s.isFile()||s.size>30_000)throw syncFail('GOOGLE_CREDENTIAL_INVALID','El archivo de credenciales no es válido.');
     const c=JSON.parse(await fs.readFile(resolved,'utf8'));
-    if(c.type!=='service_account'||!c.client_email?.endsWith('.gserviceaccount.com')||!c.private_key?.includes('BEGIN PRIVATE KEY')||c.token_uri!=='https://oauth2.googleapis.com/token')throw Error('Se necesita una clave JSON de cuenta de servicio de Google.');
+    if(c.type!=='service_account'||!c.client_email?.endsWith('.gserviceaccount.com')||!c.private_key?.includes('BEGIN PRIVATE KEY')||c.token_uri!=='https://oauth2.googleapis.com/token')throw syncFail('GOOGLE_CREDENTIAL_INVALID','Se necesita una clave JSON de cuenta de servicio de Google.');
     this.accountEmail=c.client_email;return c;
   }
   async configure(next){if(this.busy)throw Error('Hay una sincronización en curso');
@@ -98,7 +116,7 @@ export class SheetsSync {
     const signature=crypto.sign('RSA-SHA256',Buffer.from(msg),c.private_key).toString('base64url');
     const form=new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion:msg+'.'+signature});
     const response=await this.fetchImpl(c.token_uri,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:form.toString(),signal:AbortSignal.timeout(25000)});
-    const json=await response.json();if(!response.ok||!json.access_token)throw Error('OAuth Google: '+(json.error_description||json.error||response.status));
+    const json=await response.json().catch(()=>({}));if(!response.ok||!json.access_token)throw syncFail('GOOGLE_AUTH_FAILED','OAuth Google: '+(json.error_description||json.error||response.status),{status:response.status,error:typeof json.error==='string'?json.error.slice(0,40):null});
     this.token=json.access_token;this.tokenExpires=Date.now()+Number(json.expires_in||3500)*1000;return this.token;
   }
   async googleGet(route,params={}){const token=await this.accessToken(),url='https://sheets.googleapis.com/v4/spreadsheets/'+encodeURIComponent(this.config.spreadsheet_id)+route;
@@ -107,7 +125,7 @@ export class SheetsSync {
       // A service account has a 60-read-requests/minute per-user quota.
       const diff=Date.now()-this.lastRequest;if(diff<1150)await this.pause(1150-diff);
       this.lastRequest=Date.now();const res=await this.fetchImpl(url+(query.size?'?'+query.toString():''),{headers:{authorization:`Bearer ${token}`},signal:AbortSignal.timeout(90000)});
-      if(res.ok)return res.json();const body=await res.text().catch(()=>'');err=new Error(`Google Sheets HTTP ${res.status}: ${body.slice(0,350)}`);
+      if(res.ok)return res.json();const body=await res.text().catch(()=>'');err=syncFail('GOOGLE_HTTP',`Google Sheets HTTP ${res.status}: ${body.slice(0,350)}`,{status:res.status,stage:'metadata'});
       if(![429,500,502,503,504].includes(res.status))break;await this.pause(Math.min(32000,1500*2**attempt));
     }throw err;
   }
@@ -123,7 +141,7 @@ export class SheetsSync {
       if(res.ok){const values=(await res.json()).valueRanges||[],a=values[0]?.values||[],b=values[1]?.values||[];
         return Array.from({length:Math.max(a.length,b.length)},(_,i)=>[...(tailCol?Array.from({length:17},(_,j)=>a[i]?.[j]??''):(a[i]||[])),...(tailCol?Array.from({length:3},(_,j)=>b[i]?.[j]??''):[])]);
       }
-      lastError=new Error(`Google Sheets ${tab} HTTP ${res.status}: ${(await res.text().catch(()=>'' )).slice(0,220)}`);
+      lastError=syncFail('GOOGLE_HTTP',`Google Sheets ${tab} HTTP ${res.status}: ${(await res.text().catch(()=>'' )).slice(0,220)}`,{status:res.status,tab});
       if(![429,500,502,503,504].includes(res.status))break;await this.pause(Math.min(32000,1500*2**attempt));
     }throw lastError;
   }
@@ -161,8 +179,8 @@ export class SheetsSync {
       const meta=await this.metadata();const known=new Map((meta.sheets||[]).map(s=>[s.properties.title,s.properties.gridProperties?.rowCount||0]));
       const old=this.getDb();
       for(const source of SOURCE_TABS){const {tab,type}=source;
-        if(!known.has(tab))throw Error(`Falta la pestaña obligatoria: ${tab}`);
-        const allocated=known.get(tab);if(allocated>400000)throw Error(`Demasiadas filas asignadas en ${tab}; revisar el origen.`);
+        if(!known.has(tab))throw syncFail('SOURCE_TAB_MISSING',`Falta la pestaña obligatoria: ${tab}`,{tab});
+        const allocated=known.get(tab);if(allocated>400000)throw syncFail('SOURCE_TOO_LARGE',`Demasiadas filas asignadas en ${tab}; revisar el origen.`,{tab});
         const existing=old.tables[type]||[];
         let startRow=1;if(type==='google_consumos'&&!full&&nextCursors[type]?.last_actual_row){const last=nextCursors[type].last_actual_row;
           if(allocated<last)full=true;
@@ -182,22 +200,22 @@ export class SheetsSync {
             startRow=1;full=true;
           }
         }
-        if(!rows.length&&existing.length)throw Error(`${tab} devolvió cero registros; se conserva el snapshot anterior.`);
+        if(!rows.length&&existing.length)throw syncFail('SOURCE_EMPTY',`${tab} devolvió cero registros; se conserva el snapshot anterior.`,{tab});
         const merged=startRow>1?[...existing.filter(x=>Number(x._sheet_row||0)<startRow),...rows]:rows;
         // Reducir considerablemente un dataset crítico requiere verificación, nunca truncar en silencio.
-        if(existing.length>100&&merged.length<existing.length*.995)
-          throw Error(`${tab}: ${existing.length} filas anteriores vs ${merged.length} actuales; reducción >0,5%. Se conservó el snapshot, requiere revisión de la fuente.`);
+        const guard=reductionDecision(type,existing,merged);
+        if(!guard.allowed)throw syncFail('SOURCE_REDUCTION',`${tab}: ${existing.length} filas anteriores vs ${merged.length} actuales (${guard.detail}). Se conservó el snapshot, requiere revisión de la fuente.`,{tab,reduction_pct:guard.reduction_pct,detail:guard.detail});
         if(type==='google_consumos'&&startRow===1&&existing.length>0&&rows.length<existing.length)
-          throw Error('Consumos: el origen tiene menos líneas que el respaldo; se bloqueó el borrado histórico automático.');
+          throw syncFail('SOURCE_REDUCTION','Consumos: el origen tiene menos líneas que el respaldo; se bloqueó el borrado histórico automático.',{tab,detail:'historial de consumos con menos líneas'});
         staged[type]=merged;
         nextCursors[type]={last_actual_row:last_actual_row||nextCursors[type]?.last_actual_row||0,source_rows:merged.length};
-        logs[type]={tab,mode:startRow>1?'COLA 3000 + NUEVAS':'COMPLETA',rows:merged.length,read_rows:rows.length,at:this.clock().toISOString(),allocated_rows:allocated};
+        logs[type]={tab,mode:startRow>1?'COLA 3000 + NUEVAS':'COMPLETA',rows:merged.length,...(guard.reason==='NEW_CUT'?{new_cut:{previous:guard.previous_cut,current:guard.new_cut,reduction_pct:guard.reduction_pct}}:{}),read_rows:rows.length,at:this.clock().toISOString(),allocated_rows:allocated};
       }
       this.progress={phase:'guardando',tab:null,processed:SOURCE_TABS.length,total:SOURCE_TABS.length};
       const now=this.clock().toISOString(),next={...old,tables:{...old.tables,...staged},sources:{...old.sources}};
       for(const src of SOURCE_TABS){next.sources[src.type]={source_type:'GOOGLE_SHEETS_API_READ_ONLY',source_tab:src.tab,original_data_rows:staged[src.type].length,retrieved_at:now,sanitized:true}};
       next.batches=[...(old.batches||[]).slice(-90),{at:now,source:'GOOGLE_SHEETS_API_READ_ONLY',mode:full?'COMPLETA':'INCREMENTAL',datasets:Object.fromEntries(Object.entries(logs).map(([k,v])=>[k,v.rows]))}];
-      if(this.getDb()!==old)throw Error('La base local cambió durante la lectura de Sheets; se conserva la importación reciente. Reintente la sincronización.');
+      if(this.getDb()!==old)throw syncFail('SYNC_CONFLICT','La base local cambió durante la lectura de Sheets; se conserva la importación reciente. Reintente la sincronización.');
       await this.commit(next);
       this.config={...this.config,cursors:nextCursors,source_log:logs,last_sync_at:now,last_full_at:full?now:this.config.last_full_at};await this.save();
       this.progress={phase:'al día',tab:null,processed:SOURCE_TABS.length,total:SOURCE_TABS.length};return {ok:true,full,at:now,sources:logs};
