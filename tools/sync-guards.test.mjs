@@ -54,3 +54,34 @@ test('failure description names the stage and never leaks upstream messages', as
   const n = describeSyncFailure(err);
   assert.equal(n.stage, 'NEON_CONNECT'); assert.equal(n.detail.error_code, 'ECONNREFUSED');
 });
+
+
+test('stock rotation sheets may shrink when every distinct serial reconciles with the latest Inventario Real', () => {
+  const existing=Array.from({length:4454},(_,i)=>({serial:'OLD'+i}));
+  const current=Array.from({length:3873},(_,i)=>({serial:'CURRENT'+i}));
+  const inventory=[...current.map(x=>({serial:x.serial})),{serial:''},{sku:'NON_SERIAL',quantity:50}];
+  for (const type of ['rotation_tech','rotation_returns']) {
+    const d=reductionDecision(type,existing,current,{inventoryRows:inventory});
+    assert.equal(d.allowed,true,type);
+    assert.equal(d.reason,'RECONCILED_ROTATION');
+    assert.equal(d.reduction_pct,13);
+  }
+});
+test('rotation shrink is blocked without the validated inventory reference or if serials differ', () => {
+  const old=Array.from({length:300},(_,i)=>({serial:'OLD'+i}));
+  const current=Array.from({length:250},(_,i)=>({serial:'S'+i}));
+  assert.equal(reductionDecision('rotation_tech',old,current).allowed,false);
+  assert.equal(reductionDecision('rotation_tech',old,current,{inventoryRows:current.slice(1)}).allowed,false);
+  assert.equal(reductionDecision('rotation_returns',old,current,{inventoryRows:[...current,{serial:'EXTRA'}]}).allowed,false);
+  const duplicate=[...current.slice(0,-1),current[0]];
+  assert.equal(reductionDecision('rotation_tech',old,duplicate,{inventoryRows:current}).allowed,false);
+  const hugeDrop=Array.from({length:120},(_,i)=>({serial:'S'+i}));
+  assert.equal(reductionDecision('rotation_tech',old,hugeDrop,{inventoryRows:hugeDrop}).allowed,false);
+});
+test('append-only history reductions remain blocked even when stock serial reference is supplied', () => {
+  const history=Array.from({length:300},(_,i)=>({serial:'S'+i}));
+  const reduced=history.slice(0,250);
+  const d=reductionDecision('dispatch_serial',history,reduced,{inventoryRows:reduced});
+  assert.equal(d.allowed,false);
+  assert.equal(d.code,'SOURCE_REDUCTION');
+});
