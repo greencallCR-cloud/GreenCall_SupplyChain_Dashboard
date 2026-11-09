@@ -90,7 +90,7 @@ export async function runSyncCloud({ argv = process.argv.slice(2), env = process
   const args = argumentsFor(argv);
   if (args.help) return { help: HELP };
   if (args.apply) env = checkWriteTarget(env);
-  let data, expectedSnapshotId, release, stage = 'CONFIG', newCuts = {};
+  let data, expectedSnapshotId, release, stage = 'CONFIG', newCuts = {}, heldSources = [];
   try {
     if (args.fromFile) {
       // Capture the pointer before reading even a manual private extract.
@@ -130,6 +130,7 @@ export async function runSyncCloud({ argv = process.argv.slice(2), env = process
       stage = 'SHEETS_READ';
       const read = await sync.sync({ forceFull: true });
       newCuts = Object.fromEntries(Object.entries(read?.sources || {}).filter(([, v]) => v.new_cut).map(([k, v]) => [k, v.new_cut]));
+      heldSources = Object.values(read?.sources || {}).filter(v => v.mode === 'HISTORICAL_REDUCTION_QUARANTINED').map(v => v.tab);
       stage = 'VALIDATION';
       data = sanitizeSnapshot(database);
     }
@@ -137,9 +138,9 @@ export async function runSyncCloud({ argv = process.argv.slice(2), env = process
     if (args.apply) {
       stage = 'PUBLISH';
       const result = await publish(data, { env, expectedSnapshotId });
-      return { ...summary, mode: 'published', id: result.id, new_cuts: newCuts };
+      return { ...summary, mode: 'published', id: result.id, new_cuts: newCuts, held_sources: heldSources };
     }
-    return { ...summary, new_cuts: newCuts };
+    return { ...summary, new_cuts: newCuts, held_sources: heldSources };
   } catch (error) { if (error && typeof error === 'object' && !error.stage) error.stage = stage; throw error; }
   finally { if (release) await release(); }
 }
