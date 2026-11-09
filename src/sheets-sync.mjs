@@ -192,7 +192,7 @@ export class SheetsSync {
     if(this.busy)throw Error('Ya hay una sincronización ejecutándose.');
     this.busy=true;this.lastAttempt=this.clock().toISOString();this.config.last_attempt_at=this.lastAttempt;this.lastError=null;
     let full=forceFull||!this.config.last_full_at||(Date.parse(this.lastAttempt)-Date.parse(this.config.last_full_at)>this.config.full_every_hours*3600_000);
-    const staged={},logs={},nextCursors={...this.config.cursors};
+    const staged={},logs={},heldSources=new Set(),nextCursors={...this.config.cursors};
     try{
       const meta=await this.metadata();const known=new Map((meta.sheets||[]).map(s=>[s.properties.title,s.properties.gridProperties?.rowCount||0]));
       const old=this.getDb();
@@ -222,6 +222,15 @@ export class SheetsSync {
         const merged=startRow>1?[...existing.filter(x=>Number(x._sheet_row||0)<startRow),...rows]:rows;
         // Reducir considerablemente un dataset crítico requiere verificación, nunca truncar en silencio.
         const guard=reductionDecision(type,existing,merged,{inventoryRows:staged.inventory_real});
+        // Cobros is historical and a smaller live list is not evidence that old charges
+        // should disappear. Hold the previous verified source with unchanged provenance;
+        // still publish other freshly validated tables so BI is not frozen globally.
+        if(!guard.allowed&&type==='charges'&&existing.length>100&&merged.length>=existing.length*.9&&old.sources?.[type]){
+          heldSources.add(type);
+          staged[type]=existing;
+          logs[type]={tab,mode:'HISTORICAL_REDUCTION_QUARANTINED',rows:existing.length,reduction_pct:guard.reduction_pct,at:this.clock().toISOString()};
+          continue;
+        }
         if(!guard.allowed)throw syncFail('SOURCE_REDUCTION',`${tab}: ${existing.length} filas anteriores vs ${merged.length} actuales (${guard.detail}). Se conservó el snapshot, requiere revisión de la fuente.`,{tab,reduction_pct:guard.reduction_pct,detail:guard.detail});
         if(type==='google_consumos'&&startRow===1&&existing.length>0&&rows.length<existing.length)
           throw syncFail('SOURCE_REDUCTION','Consumos: el origen tiene menos líneas que el respaldo; se bloqueó el borrado histórico automático.',{tab,detail:'historial de consumos con menos líneas'});
@@ -231,7 +240,7 @@ export class SheetsSync {
       }
       this.progress={phase:'guardando',tab:null,processed:SOURCE_TABS.length,total:SOURCE_TABS.length};
       const now=this.clock().toISOString(),next={...old,tables:{...old.tables,...staged},sources:{...old.sources}};
-      for(const src of SOURCE_TABS){next.sources[src.type]={source_type:'GOOGLE_SHEETS_API_READ_ONLY',source_tab:src.tab,original_data_rows:staged[src.type].length,retrieved_at:now,sanitized:true}};
+      for(const src of SOURCE_TABS){if(heldSources.has(src.type)){next.sources[src.type]=old.sources[src.type];continue}next.sources[src.type]={source_type:'GOOGLE_SHEETS_API_READ_ONLY',source_tab:src.tab,original_data_rows:staged[src.type].length,retrieved_at:now,sanitized:true}};
       next.batches=[...(old.batches||[]).slice(-90),{at:now,source:'GOOGLE_SHEETS_API_READ_ONLY',mode:full?'COMPLETA':'INCREMENTAL',datasets:Object.fromEntries(Object.entries(logs).map(([k,v])=>[k,v.rows]))}];
       if(this.getDb()!==old)throw syncFail('SYNC_CONFLICT','La base local cambió durante la lectura de Sheets; se conserva la importación reciente. Reintente la sincronización.');
       await this.commit(next);
