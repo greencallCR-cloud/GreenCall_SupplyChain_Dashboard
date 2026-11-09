@@ -7,6 +7,14 @@ name: GreenCall Sheets sync (read-only)
 #   GREENCALL_GOOGLE_SERVICE_ACCOUNT_JSON  service-account key with Viewer access to the sheet
 #   GREENCALL_SYNC_DATABASE_URL            gc_sheets_sync role connection string
 on:
+  # A verified change to the read-only sync code on main should refresh the BI
+  # automatically, without requiring the operator to press Run workflow.
+  push:
+    branches: [main]
+    paths:
+      - 'src/sheets-sync.mjs'
+      - 'tools/sync-cloud.mjs'
+      - '.github/workflows/sheets-sync.yml'
   schedule:
     - cron: '17 */4 * * *'
   workflow_dispatch:
@@ -63,7 +71,7 @@ jobs:
           status=$?
           set -e
           if [ "$status" -eq 0 ]; then
-            node -e "const r=require(process.argv[1]);console.log('sync ok: mode='+r.mode+' new_cuts='+JSON.stringify(r.new_cuts||{}))" "$PRIVATE/result.json"
+            node -e "const r=require(process.argv[1]);console.log('sync ok: mode='+r.mode+' new_cuts='+JSON.stringify(r.new_cuts||{}));for(const t of r.held_sources||[])console.log('::warning::Source held for reduction review: '+t)" "$PRIVATE/result.json"
           else
             node -e "try{const r=require(process.argv[1]);console.log('sync failed: stage='+r.stage+' code='+r.code+' detail='+JSON.stringify(r.detail||{}));console.log('::error::Sheets sync '+r.stage+' '+r.code)}catch{console.log('sync failed')}" "$PRIVATE/error.json"
           fi
