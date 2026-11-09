@@ -61,7 +61,7 @@ export function reductionDecision(type,existing,merged,{inventoryRows}={}){
   // NOT an append-only dispatch history. Permit a smaller view only when it matches
   // the new Inventario Real serial-for-serial and has no duplicate or blank serials.
   // A missing/mismatched reference or a >50% reduction still blocks publication.
-  if(type==='rotation_tech'){
+  if(type==='rotation_tech'||type==='rotation_returns'){
     const inventory=Array.isArray(inventoryRows)?inventoryRows:[];
     const current=merged.map(r=>String(r?.serial??'').trim());
     const stock=inventory.map(r=>String(r?.serial??'').trim()).filter(Boolean);
@@ -73,7 +73,7 @@ export function reductionDecision(type,existing,merged,{inventoryRows}={}){
       return {allowed:true,reason:'RECONCILED_ROTATION',reduction_pct:pct};
     }
     return {allowed:false,code:'SOURCE_REDUCTION',reduction_pct:pct,
-      detail:'Rotación Técnicos no concilia exactamente con Inventario Real; se conserva el corte anterior'};
+      detail:'Reporte de rotación no concilia exactamente con Inventario Real; se conserva el corte anterior'};
   }
   if(fields){const before=maxCut(existing,fields),after=maxCut(merged,fields);
     if(before&&after&&after>before&&merged.length>=existing.length*.5)return {allowed:true,reason:'NEW_CUT',reduction_pct:pct,previous_cut:before,new_cut:after};
