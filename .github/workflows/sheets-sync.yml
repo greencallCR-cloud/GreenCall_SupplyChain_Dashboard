@@ -7,6 +7,14 @@ name: GreenCall Sheets sync (read-only)
 #   GREENCALL_GOOGLE_SERVICE_ACCOUNT_JSON  service-account key with Viewer access to the sheet
 #   GREENCALL_SYNC_DATABASE_URL            gc_sheets_sync role connection string
 on:
+  # A verified change to the read-only sync code on main should refresh the BI
+  # automatically, without requiring the operator to press Run workflow.
+  push:
+    branches: [main]
+    paths:
+      - 'src/sheets-sync.mjs'
+      - 'tools/sync-cloud.mjs'
+      - '.github/workflows/sheets-sync.yml'
   schedule:
     - cron: '17 */4 * * *'
   workflow_dispatch:
