@@ -54,9 +54,27 @@ export const CUT_FIELDS=Object.freeze({eta:['cut'],inventory_real:['eta_cut','sa
 const maxCut=(rows,fields)=>{let m='';for(const r of rows)for(const f of fields){const v=String(r?.[f]||'');if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v>m)m=v}return m||null};
 /** Guard against silent truncation. Histories: >0.5 % fewer rows is blocked. Stock cuts: fewer rows
  * are accepted only when the source carries a NEWER cut date, and never a loss above 50 %. */
-export function reductionDecision(type,existing,merged){
+export function reductionDecision(type,existing,merged,{inventoryRows}={}){
   if(existing.length<=100||merged.length>=existing.length*.995)return {allowed:true,reason:'NO_REDUCTION'};
   const pct=Math.round((1-merged.length/existing.length)*1000)/10,fields=CUT_FIELDS[type];
+  // "Rotación Técnicos" is a recalculated view of currently held serialized inventory,
+  // NOT an append-only dispatch history. Permit a smaller view only when it matches
+  // the new Inventario Real serial-for-serial and has no duplicate or blank serials.
+  // A missing/mismatched reference or a >50% reduction still blocks publication.
+  if(type==='rotation_tech'||type==='rotation_returns'){
+    const inventory=Array.isArray(inventoryRows)?inventoryRows:[];
+    const current=merged.map(r=>String(r?.serial??'').trim());
+    const stock=inventory.map(r=>String(r?.serial??'').trim()).filter(Boolean);
+    const currentSet=new Set(current),stockSet=new Set(stock);
+    if(merged.length>=existing.length*.5&&current.length>0
+       &&current.every(Boolean)&&currentSet.size===current.length
+       &&stockSet.size===stock.length&&stockSet.size===currentSet.size
+       &&current.every(serial=>stockSet.has(serial))){
+      return {allowed:true,reason:'RECONCILED_ROTATION',reduction_pct:pct};
+    }
+    return {allowed:false,code:'SOURCE_REDUCTION',reduction_pct:pct,
+      detail:'Reporte de rotación no concilia exactamente con Inventario Real; se conserva el corte anterior'};
+  }
   if(fields){const before=maxCut(existing,fields),after=maxCut(merged,fields);
     if(before&&after&&after>before&&merged.length>=existing.length*.5)return {allowed:true,reason:'NEW_CUT',reduction_pct:pct,previous_cut:before,new_cut:after};
     return {allowed:false,code:'SOURCE_REDUCTION',reduction_pct:pct,detail:after&&before&&after>before?'nuevo corte con pérdida mayor al 50 %':'mismo corte o corte anterior con menos filas'}}
@@ -203,13 +221,13 @@ export class SheetsSync {
         if(!rows.length&&existing.length)throw syncFail('SOURCE_EMPTY',`${tab} devolvió cero registros; se conserva el snapshot anterior.`,{tab});
         const merged=startRow>1?[...existing.filter(x=>Number(x._sheet_row||0)<startRow),...rows]:rows;
         // Reducir considerablemente un dataset crítico requiere verificación, nunca truncar en silencio.
-        const guard=reductionDecision(type,existing,merged);
+        const guard=reductionDecision(type,existing,merged,{inventoryRows:staged.inventory_real});
         if(!guard.allowed)throw syncFail('SOURCE_REDUCTION',`${tab}: ${existing.length} filas anteriores vs ${merged.length} actuales (${guard.detail}). Se conservó el snapshot, requiere revisión de la fuente.`,{tab,reduction_pct:guard.reduction_pct,detail:guard.detail});
         if(type==='google_consumos'&&startRow===1&&existing.length>0&&rows.length<existing.length)
           throw syncFail('SOURCE_REDUCTION','Consumos: el origen tiene menos líneas que el respaldo; se bloqueó el borrado histórico automático.',{tab,detail:'historial de consumos con menos líneas'});
         staged[type]=merged;
         nextCursors[type]={last_actual_row:last_actual_row||nextCursors[type]?.last_actual_row||0,source_rows:merged.length};
-        logs[type]={tab,mode:startRow>1?'COLA 3000 + NUEVAS':'COMPLETA',rows:merged.length,...(guard.reason==='NEW_CUT'?{new_cut:{previous:guard.previous_cut,current:guard.new_cut,reduction_pct:guard.reduction_pct}}:{}),read_rows:rows.length,at:this.clock().toISOString(),allocated_rows:allocated};
+        logs[type]={tab,mode:startRow>1?'COLA 3000 + NUEVAS':'COMPLETA',rows:merged.length,...(guard.reason==='NEW_CUT'?{new_cut:{previous:guard.previous_cut,current:guard.new_cut,reduction_pct:guard.reduction_pct}}:{}),...(guard.reason==='RECONCILED_ROTATION'?{reconciled_report:{reference:'Inventario Real',reduction_pct:guard.reduction_pct}}:{}),read_rows:rows.length,at:this.clock().toISOString(),allocated_rows:allocated};
       }
       this.progress={phase:'guardando',tab:null,processed:SOURCE_TABS.length,total:SOURCE_TABS.length};
       const now=this.clock().toISOString(),next={...old,tables:{...old.tables,...staged},sources:{...old.sources}};
