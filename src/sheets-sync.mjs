@@ -52,6 +52,26 @@ const syncFail=(code,message,safe)=>new SheetsSyncError(code,message,safe);
 // Everything else is treated as an append-only history.
 export const CUT_FIELDS=Object.freeze({eta:['cut'],inventory_real:['eta_cut','sap_cut'],sap_serials:['cut']});
 const maxCut=(rows,fields)=>{let m='';for(const r of rows)for(const f of fields){const v=String(r?.[f]||'');if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v>m)m=v}return m||null};
+// Rotation tables are MATERIALIZED CURRENT STOCK, not append-only histories.
+// Accept a reduction only when a newer inventory cut exists and every
+// rotation serial exactly reconciles, one-to-one, with the current inventory.
+// No row counts, credentials or individual serials are logged.
+export function verifiedRotationCut(type, existing, incoming, oldInventory, currentInventory) {
+  if (!['rotation_tech', 'rotation_returns'].includes(type) || !Array.isArray(existing) || !Array.isArray(incoming) ||
+      !Array.isArray(oldInventory) || !Array.isArray(currentInventory)) return false;
+  if (incoming.length < 100 || incoming.length < existing.length * 0.5) return false;
+  const before = maxCut(oldInventory, CUT_FIELDS.inventory_real);
+  const after = maxCut(currentInventory, CUT_FIELDS.inventory_real);
+  if (!before || !after || after <= before) return false;
+  const normalized = rows => rows.map(r => String(r?.serial || '').trim().toUpperCase()).filter(Boolean);
+  const inventorySerials = normalized(currentInventory);
+  const rotationSerials = normalized(incoming);
+  if (inventorySerials.length < 100 || inventorySerials.length !== rotationSerials.length ||
+      new Set(inventorySerials).size !== inventorySerials.length ||
+      new Set(rotationSerials).size !== rotationSerials.length) return false;
+  const inventorySet = new Set(inventorySerials);
+  return rotationSerials.every(serial => inventorySet.has(serial));
+}
 /** Guard against silent truncation. Histories: >0.5 % fewer rows is blocked. Stock cuts: fewer rows
  * are accepted only when the source carries a NEWER cut date, and never a loss above 50 %. */
 export function reductionDecision(type,existing,merged){
@@ -174,7 +194,7 @@ export class SheetsSync {
     if(this.busy)throw Error('Ya hay una sincronización ejecutándose.');
     this.busy=true;this.lastAttempt=this.clock().toISOString();this.config.last_attempt_at=this.lastAttempt;this.lastError=null;
     let full=forceFull||!this.config.last_full_at||(Date.parse(this.lastAttempt)-Date.parse(this.config.last_full_at)>this.config.full_every_hours*3600_000);
-    const staged={},logs={},nextCursors={...this.config.cursors};
+    const staged={},logs={},heldSources=new Set(),nextCursors={...this.config.cursors};
     try{
       const meta=await this.metadata();const known=new Map((meta.sheets||[]).map(s=>[s.properties.title,s.properties.gridProperties?.rowCount||0]));
       const old=this.getDb();
@@ -204,16 +224,27 @@ export class SheetsSync {
         const merged=startRow>1?[...existing.filter(x=>Number(x._sheet_row||0)<startRow),...rows]:rows;
         // Reducir considerablemente un dataset crítico requiere verificación, nunca truncar en silencio.
         const guard=reductionDecision(type,existing,merged);
-        if(!guard.allowed)throw syncFail('SOURCE_REDUCTION',`${tab}: ${existing.length} filas anteriores vs ${merged.length} actuales (${guard.detail}). Se conservó el snapshot, requiere revisión de la fuente.`,{tab,reduction_pct:guard.reduction_pct,detail:guard.detail});
+        const verifiedRotation=!guard.allowed&&verifiedRotationCut(type,existing,merged,old.tables.inventory_real||[],staged.inventory_real||[]);
+        if(!guard.allowed&&!verifiedRotation){
+          // Cobros is a financial history. Do not erase previous charges because
+          // the source now contains fewer rows. Quarantine that one source, while
+          // publishing current inventory, consumption and other verified tables.
+          if(type==='charges'&&existing.length>100&&merged.length>=existing.length*.9){
+            heldSources.add(type);staged[type]=existing;
+            logs[type]={tab,mode:'HISTORICAL_REDUCTION_QUARANTINED',rows:existing.length,reduction_pct:guard.reduction_pct,at:this.clock().toISOString()};
+            continue;
+          }
+          throw syncFail('SOURCE_REDUCTION',`${tab}: ${existing.length} filas anteriores vs ${merged.length} actuales (${guard.detail}). Se conservó el snapshot, requiere revisión de la fuente.`,{tab,reduction_pct:guard.reduction_pct,detail:guard.detail});
+        }
         if(type==='google_consumos'&&startRow===1&&existing.length>0&&rows.length<existing.length)
           throw syncFail('SOURCE_REDUCTION','Consumos: el origen tiene menos líneas que el respaldo; se bloqueó el borrado histórico automático.',{tab,detail:'historial de consumos con menos líneas'});
         staged[type]=merged;
         nextCursors[type]={last_actual_row:last_actual_row||nextCursors[type]?.last_actual_row||0,source_rows:merged.length};
-        logs[type]={tab,mode:startRow>1?'COLA 3000 + NUEVAS':'COMPLETA',rows:merged.length,...(guard.reason==='NEW_CUT'?{new_cut:{previous:guard.previous_cut,current:guard.new_cut,reduction_pct:guard.reduction_pct}}:{}),read_rows:rows.length,at:this.clock().toISOString(),allocated_rows:allocated};
+        logs[type]={tab,mode:startRow>1?'COLA 3000 + NUEVAS':'COMPLETA',rows:merged.length,...(guard.reason==='NEW_CUT'?{new_cut:{previous:guard.previous_cut,current:guard.new_cut,reduction_pct:guard.reduction_pct}}:{}),...(verifiedRotation?{verified_inventory_rotation:true,reduction_pct:guard.reduction_pct}:{}),read_rows:rows.length,at:this.clock().toISOString(),allocated_rows:allocated};
       }
       this.progress={phase:'guardando',tab:null,processed:SOURCE_TABS.length,total:SOURCE_TABS.length};
       const now=this.clock().toISOString(),next={...old,tables:{...old.tables,...staged},sources:{...old.sources}};
-      for(const src of SOURCE_TABS){next.sources[src.type]={source_type:'GOOGLE_SHEETS_API_READ_ONLY',source_tab:src.tab,original_data_rows:staged[src.type].length,retrieved_at:now,sanitized:true}};
+      for(const src of SOURCE_TABS){if(heldSources.has(src.type)){next.sources[src.type]=old.sources[src.type];continue}next.sources[src.type]={source_type:'GOOGLE_SHEETS_API_READ_ONLY',source_tab:src.tab,original_data_rows:staged[src.type].length,retrieved_at:now,sanitized:true}};
       next.batches=[...(old.batches||[]).slice(-90),{at:now,source:'GOOGLE_SHEETS_API_READ_ONLY',mode:full?'COMPLETA':'INCREMENTAL',datasets:Object.fromEntries(Object.entries(logs).map(([k,v])=>[k,v.rows]))}];
       if(this.getDb()!==old)throw syncFail('SYNC_CONFLICT','La base local cambió durante la lectura de Sheets; se conserva la importación reciente. Reintente la sincronización.');
       await this.commit(next);
